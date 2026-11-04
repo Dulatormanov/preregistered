@@ -11,7 +11,8 @@ from agents import champion, rules_v0
 from notary.canonical import content_sha256
 
 DAILY_CAPS_USD = {"tick": 3, "gate": 12}
-CHECK_CAP_USD = 10  # note: the cap is checked before a call, so the last call may go over it by one call's cost
+CHECK_CAP_USD = 10  # note: checked before each call, so calls that run at once (8 in gate/run_suite.py) may go
+#                   over a cap together, by up to that many calls' cost (well under a cent for Haiku)
 
 
 class OverCap(Exception):

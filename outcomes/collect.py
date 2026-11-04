@@ -31,7 +31,11 @@ def query(numbers):
         "Authorization": f"Bearer {os.environ['PREREG_READ_TOKEN']}", "User-Agent": "preregistered"})
     with urllib.request.urlopen(req, timeout=60) as r:
         data = json.load(r)
-    return (data.get("data") or {}).get("repository") or {}  # a deleted issue comes back as null
+    errors = sorted({e.get("type", "?") for e in data.get("errors", []) if e.get("type") != "NOT_FOUND"})
+    repo = (data.get("data") or {}).get("repository")
+    if errors or repo is None:  # fail loudly: an empty answer must not look like a day with no new labels
+        raise SystemExit(f"GraphQL failed: error types {errors}, repository {'missing' if repo is None else 'present'}")
+    return repo  # a deleted issue comes back as null, with a NOT_FOUND error
 
 
 def main():

@@ -2,7 +2,9 @@
 
 Every 30 minutes (watchdog.yml) it checks:
 - slots: each job in agents/registry.toml with a cadence must have a healthy run in each slot: a run that
-  succeeded and produced its output. Two unhealthy slots in a row raise an alert for that job;
+  succeeded and produced its output. A tick's output is the upstream list it read: a tick that saw no upstream
+  issue at all did nothing. Two unhealthy slots in a row raise an alert for that job, wherever they fall
+  between two watchdog runs;
 - the queue: any dead letter, or a message older than 60 minutes (a drain that does nothing);
 - the anchors: a guess saved more than 30 minutes ago that no anchor covers yet;
 - the read token: it expires within 14 days;
@@ -13,6 +15,7 @@ It prints one line per alert, counts only, and gives the alert types to the aler
 per type. At the end it pings its own Healthchecks check, so a watchdog that stops running is noticed too.
 """
 import json
+import math
 import os
 import tomllib
 import urllib.request
@@ -24,6 +27,7 @@ EPOCH = datetime(2026, 11, 2, tzinfo=timezone.utc)  # a Monday: every cadence co
 UPSTREAM = "https://api.github.com/repos/supabase/supabase/issues"
 OLDEST_MESSAGE_S, UNANCHORED, TOKEN_DAYS = 3600, timedelta(minutes=30), 14
 UPSTREAM_FROM, UPSTREAM_TO = timedelta(minutes=90), timedelta(minutes=60)  # the window it checks, before now
+EVERY_MIN = 30  # how often watchdog.yml runs
 
 
 def slot_of(entry, t):
@@ -32,20 +36,26 @@ def slot_of(entry, t):
     return EPOCH + timedelta(minutes=entry["at_minute"] + minutes // entry["cadence_min"] * entry["cadence_min"])
 
 
+def lookback(entry):
+    """How many closed slots to look at: enough to cover the slots closed since the watchdog's run before last."""
+    return 1 + math.ceil(2 * EVERY_MIN / entry["cadence_min"])
+
+
 def slot_alert(entry, runs, now):
-    """True if the job's last 2 closed slots are both unhealthy.
+    """True if two neighbouring closed slots among the job's last few are both unhealthy.
 
     runs: (slot, started, ok, outputs) tuples; slot is None if the run's slot must be worked out from started.
     A slot is closed once its grace has passed. It is healthy if a run for it started within the grace,
     succeeded, and produced at least min_outputs (1 by default). Slots before the entry's first_slot do not count.
     """
     grace, cadence = timedelta(minutes=entry["grace_min"]), timedelta(minutes=entry["cadence_min"])
-    last = slot_of(entry, now - grace)
-    if "first_slot" in entry and last - cadence < datetime.fromisoformat(entry["first_slot"]):
-        return False  # the job did not exist yet for one of these slots
+    first = datetime.fromisoformat(entry["first_slot"]) if "first_slot" in entry else None
     healthy = {slot or slot_of(entry, started) for slot, started, ok, outputs in runs
                if ok and outputs >= entry.get("min_outputs", 1) and started < (slot or slot_of(entry, started)) + grace}
-    return last not in healthy and last - cadence not in healthy
+    last = slot_of(entry, now - grace)
+    closed = [last - i * cadence for i in range(lookback(entry) + 1)]
+    return any(newer not in healthy and older not in healthy for newer, older in zip(closed, closed[1:])
+               if first is None or older >= first)  # a slot before first_slot: the job did not exist yet
 
 
 def queue_alerts(dead_letters, oldest_message_s):
@@ -77,7 +87,8 @@ def evidence(db, entry, since, token):
     if kind == "event" and name == "polled":  # a tick says which slot it served; runs started by hand fill none
         rows = db.execute("select data from prereg.run_events where kind = 'polled' and created_at >= %s"
                           " and data->>'trigger' = 'schedule'", [since]).fetchall()
-        return [(utc(d["planned_start"]), utc(d["actual_start"]), poll_ok(d), 1) for (d,) in rows]
+        return [(utc(d["planned_start"]), utc(d["actual_start"]), poll_ok(d), 1 if d.get("newest_upstream") else 0)
+                for (d,) in rows]  # a tick that saw no upstream issue at all did nothing
     if kind == "event":
         rows = db.execute("select created_at from prereg.run_events where kind = %s and created_at >= %s",
                           [name, since]).fetchall()
@@ -93,9 +104,9 @@ def check(db, token, now):
     alerts = {}
     for entry in tomllib.loads((ROOT / "agents/registry.toml").read_text())["job"]:
         if "cadence_min" in entry:
-            since = now - timedelta(minutes=3 * entry["cadence_min"] + entry["grace_min"])
+            since = now - timedelta(minutes=(lookback(entry) + 3) * entry["cadence_min"] + entry["grace_min"])
             if slot_alert(entry, evidence(db, entry, since, token), now):
-                alerts[f"missed:{entry['id']}"] = f"{entry['id']}: its last 2 slots had no healthy run"
+                alerts[f"missed:{entry['id']}"] = f"{entry['id']}: 2 slots in a row had no healthy run"
     dead, oldest = db.execute("select * from prereg.queue_health()").fetchone()
     for kind in queue_alerts(dead, oldest):
         alerts[kind] = f"queue: {dead} dead letters, oldest message {oldest // 60} minutes old"
@@ -132,14 +143,17 @@ def main():
     now = datetime.now(timezone.utc)
     with psycopg.connect(os.environ["OBSERVER_DB_URL"], autocommit=True) as db:  # observer: reads only
         alerts = check(db, os.environ["GH_TOKEN"], now)
+    ping = os.environ.get("HC_WATCHDOG_URL", "")
+    if os.environ.get("GITHUB_ACTIONS") and not ping:  # the dead-man's switch is off: say so, once, in an issue
+        alerts["no_dead_mans_switch"] = "HC_WATCHDOG_URL is not set, so nobody would notice if the watchdog stopped"
     for line in alerts.values():
         print("ALERT", line)
     print(f"watchdog: {len(alerts)} alerts")
     if "GITHUB_OUTPUT" in os.environ:
         with open(os.environ["GITHUB_OUTPUT"], "a") as f:
             f.write(f"alerts={json.dumps(alerts)}\n")
-    if os.environ.get("HC_WATCHDOG_URL"):  # the dead-man's switch: Healthchecks alerts if these pings stop
-        urllib.request.urlopen(os.environ["HC_WATCHDOG_URL"], timeout=10)
+    if ping:  # the dead-man's switch: Healthchecks alerts if these pings stop. A failed ping fails the run.
+        urllib.request.urlopen(ping, timeout=10)
 
 
 if __name__ == "__main__":
