@@ -215,3 +215,26 @@ autonomy = "read_report"
 suite = "ci"
 secrets = []
 permissions = ["contents: read", "issues: write"]
+
+[[job]]
+id = "drift/check"
+owner = "Dulatormanov"
+tier = "read"
+autonomy = "read_report"
+suite = "ci"
+secrets = ["OBSERVER_DB_URL"]
+permissions = ["contents: read"]
+cadence_min = 1440
+at_minute = 331  # 05:31 UTC
+grace_min = 180
+evidence = "run:drift.yml"
+first_slot = "2026-11-05T05:31:00+00:00"  # the first slot this job could fill
+
+[[job]]
+id = "drift/alert"
+owner = "Dulatormanov"
+tier = "public_write"
+autonomy = "read_report"
+suite = "ci"
+secrets = []
+permissions = ["contents: read", "issues: write"]

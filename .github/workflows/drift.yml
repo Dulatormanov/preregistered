@@ -1,0 +1,50 @@
+name: drift
+
+# The drift check (ops/drift.py), daily: the live database's privileges must equal credentials.toml, its prereg
+# functions must equal db/catalog.json, and the schemas net and pgmq_public must not exist. The alert job opens
+# one issue per alert type.
+on:
+  schedule:
+    - cron: "31 5 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      alerts: ${{ steps.check.outputs.alerts }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - run: |  # wheels only, so installing runs no package code
+          python3 -m venv .venv
+          .venv/bin/pip install -q --require-hashes --only-binary :all: -r requirements.txt
+      - id: check
+        run: .venv/bin/python -m ops.drift
+        env:
+          OBSERVER_DB_URL: ${{ secrets.OBSERVER_DB_URL }}  # the observer role: reads, never writes
+
+  alert:
+    needs: check
+    if: always() && needs.check.outputs.alerts != '{}'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      issues: write  # one open issue per alert type; this job holds no database login
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ALERT_SOURCE: drift check
+          ALERTS: ${{ needs.check.outputs.alerts || '{"did_not_run": "the drift check did not finish"}' }}
+        run: python3 -m ops.open_alerts

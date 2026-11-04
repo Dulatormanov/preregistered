@@ -66,6 +66,8 @@ jobs:
           .venv/bin/python tests/test_known_bad.py
       - name: Migrations and check_roles.sql
         run: .venv/bin/python tests/setup_test_db.py
+      - name: db/catalog.json matches the functions the migrations make
+        run: .venv/bin/python -m ops.drift --check-catalog
       - name: Queue functions (dead letters, temp-table hijack, repeats)
         run: .venv/bin/python tests/test_db_functions.py
       - name: Privilege matrix equals credentials.toml
@@ -82,3 +84,5 @@ jobs:
         run: .venv/bin/python tests/test_suite.py
       - name: Watchdog checks (fake GitHub)
         run: .venv/bin/python tests/test_watchdog.py
+      - name: Drift check (it changes the database and puts it back, so it runs last)
+        run: .venv/bin/python tests/test_drift.py
