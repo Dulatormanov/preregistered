@@ -1,0 +1,73 @@
+name: sealed
+
+# The sealed score (adopt/sealed.py, PREREGISTRATION.md v1): the champion guesses the 151 sealed issues once, on or
+# after 2026-11-16, when their labels are final. It checks every day; before that date, and after the one run, it does
+# nothing. Then the open-pr job opens a pull request with results/sealed.json (counts only). GitHub starts no checks
+# for a pull request that GITHUB_TOKEN opened, so the owner closes and reopens it to run them, then merges it.
+on:
+  schedule:
+    - cron: "47 7 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: sealed
+  cancel-in-progress: false
+
+jobs:
+  score:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: adopt  # ADOPTER_DB_URL lives here, and only main may use it
+    permissions:
+      contents: read  # a model key and no write right (the registry rule)
+    outputs:
+      ran: ${{ steps.score.outputs.ran }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - run: |  # wheels only, so installing runs no package code
+          python3 -m venv .venv
+          .venv/bin/pip install -q --require-hashes --only-binary :all: -r requirements.txt
+      - id: score
+        run: .venv/bin/python -m adopt.sealed
+        env:
+          ADOPTER_DB_URL: ${{ secrets.ADOPTER_DB_URL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PREREG_READ_TOKEN: ${{ secrets.PREREG_READ_TOKEN }}
+      - if: steps.score.outputs.ran == 'yes'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: sealed-results
+          path: results/sealed.json
+          retention-days: 90
+
+  open-pr:
+    needs: score
+    if: needs.score.outputs.ran == 'yes'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write  # one new branch; main itself is protected by the ruleset
+      pull-requests: write  # one pull request; this job holds no model key and no database login
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: sealed-results
+          path: results
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c sealed-results
+          git add results/sealed.json
+          git commit -q -m "The sealed score: results/sealed.json, counts only"
+          git push -q "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPO}.git" sealed-results
+          gh pr create --head sealed-results --title "The sealed score" --body "The champion named in PREREGISTRATION.md v1 guessed the sealed set once (adopt/sealed.py). results/sealed.json holds counts only: per area, the true count, the guesses, the right ones, the Wilson low, and whether the area is promoted. Close and reopen this pull request to run its checks, then merge it."

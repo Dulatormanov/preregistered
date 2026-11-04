@@ -2,7 +2,7 @@
 
 Run it after db/003_roles.sql (it needs the notary and observer roles). Until the Day 3 test database
 exists, run it on your Mac against prereg-prod:
-  TRIAGE_DB_URL=... NOTARY_DB_URL=... OBSERVER_DB_URL=... COLLECTOR_DB_URL=... GATE_DB_URL=... python tests/test_db_grants.py
+  TRIAGE_DB_URL=... NOTARY_DB_URL=... OBSERVER_DB_URL=... COLLECTOR_DB_URL=... GATE_DB_URL=... ADOPTER_DB_URL=... python tests/test_db_grants.py
 Every attempt touches zero rows (WHERE false, or an empty table for TRUNCATE inside a rollback), so even
 an attempt that is wrongly allowed changes nothing and uses no id. Each also runs in its own transaction,
 which always rolls back. check_roles.sql covers what this test does not, from the catalog.
@@ -21,6 +21,11 @@ COLUMNS = {  # from the migrations in db/; check_roles.sql reads the live catalo
               "created_at"],
     "runs": ["msg_id", "issue_number", "champion_id", "read_ct", "run_id", "created_at"],  # db/004_functions.sql
     "outcomes": ["issue_number", "event_key", "label", "action", "actor", "by_author", "labeled_at", "created_at"],
+    "models_seen": ["model_id", "display_name", "model_created_at", "first_seen_at"],  # db/010_adopt.sql
+    "sealed_guesses": ["issue_number", "champion_id", "status", "area", "needs_details", "input_sha256", "created_at"],
+    "challenger_results": ["check_id", "model_id", "issue_set", "case_key", "status", "area", "needs_details", "passed",
+                           "input_sha256", "created_at"],
+    "verdicts": ["check_id", "model_id", "verdict", "dry_run", "data", "created_at"],
 }
 TIMED_INSERT = {  # an insert that also sets the row's time: no job may do it
     "issues_seen": "(issue_number, gh_created_at, content_sha256, labels_at_seen, first_seen_at)"
@@ -33,6 +38,10 @@ TIMED_INSERT = {  # an insert that also sets the row's time: no job may do it
     "runs": "(msg_id, issue_number, champion_id, read_ct, created_at) select 1, 1, 'x', 1, now()",
     "outcomes": "(issue_number, event_key, label, action, actor, by_author, labeled_at, created_at)"
                 " select 1, 'x', 'x', 'add', 'User', false, now(), now()",
+    "models_seen": "(model_id, first_seen_at) select 'x', now()",
+    "sealed_guesses": "(issue_number, champion_id, status, input_sha256, created_at) select 1, 'x', 'ok', 'x', now()",
+    "challenger_results": "(check_id, model_id, issue_set, case_key, status, created_at) select 'x', 'x', 'dev', 'x', 'ok', now()",
+    "verdicts": "(check_id, model_id, verdict, dry_run, data, created_at) select 'x', 'x', 'HOLD', true, '{}', now()",
 }
 PLAIN_INSERT = {  # an insert with only the columns that some job may fill
     "issues_seen": "(issue_number, gh_created_at, content_sha256, labels_at_seen) select 1, now(), 'x', '{}'",
@@ -43,10 +52,15 @@ PLAIN_INSERT = {  # an insert with only the columns that some job may fill
     "runs": "(msg_id, issue_number, champion_id, read_ct) select 1, 1, 'x', 1",  # only functions add runs
     "outcomes": "(issue_number, event_key, label, action, actor, by_author, labeled_at)"
                 " select 1, 'x', 'x', 'add', 'User', false, now()",  # only record_outcome adds outcomes
+    "models_seen": "(model_id) select 'x'",
+    "sealed_guesses": "(issue_number, champion_id, status, input_sha256) select 1, 'x', 'ok', 'x'",
+    "challenger_results": "(check_id, model_id, issue_set, case_key, status) select 'x', 'x', 'dev', 'x', 'ok'",
+    "verdicts": "(check_id, model_id, verdict, dry_run, data) select 'x', 'x', 'HOLD', true, '{}'",
 }
-MAY_ADD = {"triage_agent": set(), "notary": set(), "observer": set(), "collector": set(), "gate_runner": set()}
+MAY_ADD = {"triage_agent": set(), "notary": set(), "observer": set(), "collector": set(), "gate_runner": set(),
+           "adopter": set()}
 ROLES = (("triage_agent", "TRIAGE_DB_URL"), ("notary", "NOTARY_DB_URL"), ("observer", "OBSERVER_DB_URL"),
-         ("collector", "COLLECTOR_DB_URL"), ("gate_runner", "GATE_DB_URL"))  # every write is a function call
+         ("collector", "COLLECTOR_DB_URL"), ("gate_runner", "GATE_DB_URL"), ("adopter", "ADOPTER_DB_URL"))  # functions only
 
 
 def attempts(role):

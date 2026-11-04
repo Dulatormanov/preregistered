@@ -2,6 +2,15 @@
 
 Newest first. Each entry says what was decided and why.
 
+## 2026-11-05 (Build day 4, started early)
+
+- **The sealed score cannot run before 2026-11-16**, when the sealed labels are final, so it is built to run by itself. `sealed.yml` checks every day at 07:47 UTC. `adopt/sealed.py` does nothing before that date, and nothing after the one run. On the day, it reads the 151 sealed issues with GraphQL, leaves out any whose text no longer has its hash, lets haiku55-p2 (the champion that v1 names) guess each one, and writes `results/sealed.json`: per area, the true count, the guesses, the right ones, the Wilson low and whether the area is promoted. Counts only. A job with no model key and no database login opens the pull request with it.
+  - The golden-set builder is never run again: it rewrites the sealed list. The sealed truth comes from a fresh read of the 151 issues instead.
+- **The run-once rule is the database's own.** The champion's sealed guesses go to `prereg.sealed_guesses`, never into the live ledger, and its primary key is the issue: a second guess for any sealed issue fails with 23505.
+- **A login for the model watcher** (`db/010_adopt.sql`): `adopter` can only record the models it saw, a challenger's guesses, verdicts and the sealed guesses, and read spend and the number of paid checks. Its secret lives in the environment `adopt`, which only main may use, so the code of a pull request can never write a sealed guess.
+- **The statistics** (`adopt/stats.py`): the one-sided exact sign test, the 95% Wilson interval, the promotion bar and the verdict rules, in the order v1 gives them. `tests/test_stats.py` checks them against values worked out by hand; for example, the sign test gives 11/1024 for 9 wins and 1 loss.
+- **"Allow GitHub Actions to create and approve pull requests" is on,** because the result and verdict pull requests are opened by a job. GitHub starts no checks for a pull request that GITHUB_TOKEN opens, so the owner closes and reopens one to run them. The ruleset still needs both checks, and 0 approvals.
+
 ## 2026-11-05 (Build day 3, started early)
 
 - **`tools/reconstruct.py`** rebuilds one issue's guesses from public data and checks each step: first sight and its content hash, the text on GitHub now (it stops if the issue changed), rules_v0 run again, the champion's setup found in git by the SHA-256 of `models.lock` its step saved, every attempt with its Actions run, and the anchor recomputed from the ledger with its chain link and its Notary log comment. It prints no issue text. On prereg-prod it rebuilt haiku55-p2's first live guess with every check OK, and `tests/test_tick.py` runs it in CI.

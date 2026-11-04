@@ -5,16 +5,16 @@
 with t as (select oid, relname from pg_class where relnamespace = 'prereg'::regnamespace and relkind = 'r'),
      rel as (select oid, relname from pg_class where relnamespace = 'prereg'::regnamespace
              and relkind in ('r', 'p', 'v', 'm', 'f')),  -- tables, views and the rest: a view can be written
-     job as (select oid, rolname from pg_roles where rolname in ('triage_agent', 'notary', 'observer', 'collector', 'gate_runner')),
+     job as (select oid, rolname from pg_roles where rolname in ('triage_agent', 'notary', 'observer', 'collector', 'gate_runner', 'adopter')),
      r as (select oid, rolname from pg_roles
-           where rolname in ('postgres', 'triage_agent', 'notary', 'observer', 'collector', 'gate_runner', 'anon', 'authenticated',
+           where rolname in ('postgres', 'triage_agent', 'notary', 'observer', 'collector', 'gate_runner', 'adopter', 'anon', 'authenticated',
                              'service_role')),
      adders as (select rel.relname, array_agg(distinct r.rolname::text order by r.rolname::text) as roles
                 from rel join pg_attribute a on a.attrelid = rel.oid and a.attnum > 0 and not a.attisdropped, r
                 where has_column_privilege(r.oid, rel.oid, a.attnum, 'INSERT') group by rel.relname)
 select check_name, ok from (values
   ('1. postgres does not get the rights of prereg_owner or of a job role by default',
-   not exists (select from pg_roles x where x.rolname in ('prereg_owner', 'triage_agent', 'notary', 'observer', 'collector', 'gate_runner')
+   not exists (select from pg_roles x where x.rolname in ('prereg_owner', 'triage_agent', 'notary', 'observer', 'collector', 'gate_runner', 'adopter')
                and pg_has_role('postgres', x.oid, 'USAGE'))),
   ('2. postgres can still SET ROLE prereg_owner on purpose',
    pg_has_role('postgres', 'prereg_owner', 'SET')),
@@ -51,7 +51,9 @@ select check_name, ok from (values
              from pg_proc f, r where f.pronamespace = 'prereg'::regnamespace
              and has_function_privilege(r.oid, f.oid, 'EXECUTE')) x), '{}')
    = coalesce((select array_agg(e order by e) from unnest(array[
-        'claim_next:triage_agent', 'complete:triage_agent', 'enqueue_issue:triage_agent', 'log_event:triage_agent',
+        'claim_next:triage_agent', 'complete:triage_agent', 'paid_checks:adopter', 'record_challenger_guess:adopter',
+        'record_gate_step:adopter', 'record_model_seen:adopter', 'record_sealed_guess:adopter', 'record_verdict:adopter',
+        'sealed_count:adopter', 'spend_today:adopter', 'spend_total:adopter', 'enqueue_issue:triage_agent', 'log_event:triage_agent',
         'losses_since:triage_agent', 'newest_first_sight:triage_agent', 'queue_health:observer',
         'recent_provider_failures:triage_agent', 'record_anchor:notary', 'record_failure:triage_agent',
         'record_gate_step:gate_runner', 'record_outcome:collector', 'record_probe:triage_agent',
