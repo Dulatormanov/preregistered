@@ -44,8 +44,7 @@ PLAIN_INSERT = {  # an insert with only the columns that some job may fill
     "outcomes": "(issue_number, event_key, label, action, actor, by_author, labeled_at)"
                 " select 1, 'x', 'x', 'add', 'User', false, now()",  # only record_outcome adds outcomes
 }
-MAY_ADD = {"triage_agent": {"issues_seen", "predictions", "run_events", "steps"}, "notary": {"anchors"},
-           "observer": set(), "collector": set()}
+MAY_ADD = {"triage_agent": set(), "notary": set(), "observer": set(), "collector": set()}  # functions only
 ROLES = (("triage_agent", "TRIAGE_DB_URL"), ("notary", "NOTARY_DB_URL"), ("observer", "OBSERVER_DB_URL"),
          ("collector", "COLLECTOR_DB_URL"))
 
@@ -59,7 +58,7 @@ def attempts(role):
         yield f"create trigger grant_probe before update on prereg.{table}" \
               " for each row execute function suppress_redundant_updates_trigger()"
         yield f"insert into prereg.{table} {TIMED_INSERT[table]} where false"
-        if table not in MAY_ADD[role]:
+        if table not in MAY_ADD[role]:  # since 006, no role adds a row directly
             yield f"insert into prereg.{table} {PLAIN_INSERT[table]} where false"
     for other in ("prereg_owner", "postgres") + tuple(r for r, _ in ROLES if r != role):
         yield f"set role {other}"

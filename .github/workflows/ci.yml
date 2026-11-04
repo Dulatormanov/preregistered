@@ -51,3 +51,7 @@ jobs:
         run: .venv/bin/python tests/test_privilege_matrix.py
       - name: Grant test (every forbidden attempt denied with 42501)
         run: .venv/bin/python tests/test_db_grants.py
+      - name: One tick end to end (fake GitHub and Claude)
+        run: .venv/bin/python tests/test_tick.py
+      - name: Kill test (kill -9 the worker mid-batch)
+        run: .venv/bin/python tests/test_rollback.py

@@ -86,3 +86,11 @@ def guess(cfg, client, title, body):
         return None, None, h, step
     step["status"] = "ok"
     return out["area"], out["needs_details"], h, step
+
+
+PROBE = ("Table editor Save button does nothing", "In Studio, clicking Save in the table editor does nothing.")
+
+
+def probe(cfg, client):
+    """The circuit breaker's small test call: its step, whose status is "ok" when the provider answers."""
+    return guess(cfg, client, *PROBE)[3]

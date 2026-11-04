@@ -3,6 +3,8 @@
 Run on your Mac: TRIAGE_DB_URL=... ANTHROPIC_API_KEY=... GH_TOKEN=... python scripts/check4.py
 It reads 20 issues created Sep 1-19, 2026 (the dev set, never the sealed set), logs each call in
 prereg.steps as job 'check4', and prints tokens and cost only. It prints no guesses, so it tunes nothing.
+It ran once, on 2026-11-04 (DECISIONS.md), while triage_agent could still insert steps. Since
+db/006_revoke.sql it would need a function to save its steps.
 """
 import json
 import os
@@ -16,7 +18,8 @@ import anthropic  # noqa: E402
 import psycopg  # noqa: E402
 
 from agents import champion  # noqa: E402
-from runner.poll import STEP  # noqa: E402
+STEP = ("job", "issue_number", "champion_id", "model", "status", "request_id", "input_tokens", "output_tokens",
+        "cache_read_tokens", "cache_write_tokens", "cost_usd", "lock_sha256", "error")
 
 req = urllib.request.Request(
     "https://api.github.com/search/issues?q=repo:supabase/supabase+is:issue+created:2026-09-01..2026-09-19"
