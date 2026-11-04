@@ -4,6 +4,7 @@ Newest first. Each entry says what was decided and why.
 
 ## 2026-11-04 (Day 1, started a day early)
 
+- **PREREGISTRATION.md v0 is anchored**: anchor 3 on the Notary log, at 16:31:59 UTC, pins it at commit 4567c8b. A second run 40 seconds later pinned the same file at the same commit again (anchor 4). The first time counts. Both comments recompute.
 - **The champion is Claude Haiku 5.5** (`haiku55-p0` in `models.lock`): effort low, thinking off, and structured output that can only name one of the six areas. One call per issue costs about $0.0002. `models.lock` pins the prompt and the taxonomy by their SHA-256, and the job stops if they differ.
 - **The keyword rule keeps guessing** as the baseline series. It costs nothing, and it is the floor every model must beat on the same issues.
 - **A cap of $3 a day, in code.** The Anthropic key has no workspace limit, so the live job checks today's spend in `prereg.steps` before every call. `spend_today()` moves this check into the database on Build day 1.
