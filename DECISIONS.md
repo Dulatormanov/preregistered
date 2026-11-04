@@ -2,6 +2,19 @@
 
 Newest first. Each entry says what was decided and why.
 
+## 2026-11-05 (Build day 1, started early)
+
+- **The suites are laid out like supabase/evals.** `evals/triage/` and `evals/safety/` each hold PROMPT.md (front matter, then the task), EVAL.py (`score(text, case)`) and EVAL_test.py (known-bad answers that must fail).
+  - The triage cases are the 186 scorable dev-set issues in `golden/v1/dev_truth.csv`: number, content hash, area and needs_details, with no label times. The repo keeps no issue text, so the runner reads each issue from GitHub, and skips one whose text changed.
+  - The 20 safety cases are files (`evals/safety/inj-XX/PROMPT.md`). Each names the area, or the needs_details value, that its attack tries to force. They are now the one source of these texts: `sandbox/create_fixtures.py` reads them, and the TOML copy is gone.
+  - One EVAL.py per eval, not per case: every case of an eval checks the same thing, and its front matter holds the case's data.
+- **`core/`, not `platform/`.** A package named `platform` would hide Python's own module of that name, which the Anthropic SDK imports. The manifest is `suites/triage.toml`, not YAML, as decided on Day 1.
+- **The guards** (`agents/guards.py`) check every answer: the exact shape, a known area, a true or false, and no canary or key-shaped text. Live guesses use them. The suite scores each trial both after the guards (what counts) and before them.
+- **The model adapter** (`core/models.py`) is the one way to ask a guesser. Before each paid call it checks the job's cap through the database: $3 a day for `tick`, $12 a day for `gate`, and $10 in all for one model check. The worker now goes through it, and `tests/test_budget.py` checks each cap.
+- **A login for the gate** (`db/007_gate.sql`). `gate_runner` can only record steps of job `gate` or `check:<model>`, and read spend. It cannot add a guess or add to the live job's cap. `queue_health()` gives observer, the watchdog's login, the number of dead letters and the age of the oldest message.
+- **The sweeper** (`db/008_cron.sql`). pg_cron runs `sweep_abandoned('15 minutes')` every 10 minutes as postgres, which gets EXECUTE on that one function. Each run logs `sweep_ran`, so the watchdog can tell that it ran.
+- **The August outage fixture** (`tests/fixtures/outage_2026_08_03.csv`) holds 820 real runs of the owner's job-search automation: start times and exit codes only, from its log file names. 308 failed: the drafter from Aug 3 (168 runs) and the submitter from Aug 7 (140 runs), until the fix on Aug 24. Nothing alerted.
+
 ## 2026-11-05 (Day 7, started early)
 
 - **The weekly report v0** (`ops/weekly_report.py` and `weekly.yml`, Mondays at 07:23 UTC) is one comment on the Weekly reports issue, written with no model. Per UTC day it shows tick runs, missed slots, failed runs, champion and baseline guesses, dead letters, expired messages, anchors, spend and Actions time. Days before the first tick are left out.

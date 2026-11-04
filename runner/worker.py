@@ -21,14 +21,19 @@ import anthropic
 from psycopg.types.json import Jsonb
 
 from agents import champion
+from core import models
 from notary.canonical import content_sha256
 
 VT = 120  # seconds a claimed message stays hidden: if the worker dies, the message comes back after this
 MAX_CALLS = 10  # model calls per run, the probe included
 MAX_READ_FAILURES = 3  # failed GitHub reads per run
 BUDGET_S = 120  # no new call after this many seconds: the job's limit is 5 minutes
-DAILY_CAP_USD = 3  # note: the live cap; spend_today() sums the steps of job 'tick'
 OUTCOME = {"ok": "guessed", "refused": "refused", "invalid": "invalid"}  # step status -> complete() outcome
+
+
+def over_cap(db):
+    used, cap = models.spent(db, "tick")
+    return used >= cap
 
 
 def run(db, read_issue, listed, cfg, client=None):
@@ -44,11 +49,15 @@ def run(db, read_issue, listed, cfg, client=None):
     t0, calls, run_id = time.monotonic(), 0, os.environ.get("GITHUB_RUN_ID", "local")  # the probe counts too
     n = {"guessed": 0, "refused": 0, "invalid": 0, "errors": 0, "gone": 0, "unreachable": 0, "other_champion": 0,
          "capped": False, "out_of_time": False, "breaker": "closed", "cost_usd": 0.0}
-    if db.execute("select prereg.spend_today('tick')").fetchone()[0] >= DAILY_CAP_USD:  # the cap covers the probe too
+    if over_cap(db):  # the cap covers the probe too
         n["capped"] = True
         return n
     if db.execute("select prereg.recent_provider_failures()").fetchone()[0]:
-        step = champion.probe(cfg, client)
+        try:
+            step = models.probe(db, "tick", cfg, client)
+        except models.OverCap:
+            n["capped"] = True
+            return n
         calls += 1
         db.execute("select prereg.record_probe(%s)", [Jsonb(step)])
         n["cost_usd"] = float(step["cost_usd"])
@@ -60,7 +69,7 @@ def run(db, read_issue, listed, cfg, client=None):
         if time.monotonic() - t0 > BUDGET_S:
             n["out_of_time"] = True
             break
-        if db.execute("select prereg.spend_today('tick')").fetchone()[0] >= DAILY_CAP_USD:
+        if over_cap(db):  # checked before a claim, so a capped run takes no message
             n["capped"] = True
             break
         row = db.execute("select * from prereg.claim_next(%s, %s)", [VT, run_id]).fetchone()
@@ -95,8 +104,12 @@ def run(db, read_issue, listed, cfg, client=None):
                        [attempt, Jsonb(champion.new_step(cfg, "skipped", reason))])
             n["gone"] += 1
             continue
+        try:  # only the title and the body go to the model
+            area, needs_details, h, step = models.answer(db, "tick", cfg, client, it["title"], it["body"])
+        except models.OverCap:  # the cap was reached since the check above: the message comes back after VT
+            n["capped"] = True
+            break
         calls += 1
-        area, needs_details, h, step = champion.guess(cfg, client, it["title"], it["body"])
         n["cost_usd"] = round(n["cost_usd"] + float(step["cost_usd"]), 6)
         if step["status"] == "error":  # stop claiming: the breaker decides the next run
             db.execute("select prereg.record_failure(%s, %s)", [attempt, Jsonb(step)])

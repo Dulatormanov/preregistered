@@ -45,6 +45,9 @@ jobs:
           .venv/bin/python tests/test_champion.py
           .venv/bin/python tests/test_lint_refs.py
           .venv/bin/python tests/test_probe.py
+          .venv/bin/python tests/test_budget.py
+          .venv/bin/python evals/triage/EVAL_test.py
+          .venv/bin/python evals/safety/EVAL_test.py
       - name: Migrations and check_roles.sql
         run: .venv/bin/python tests/setup_test_db.py
       - name: Queue functions (dead letters, temp-table hijack, repeats)
@@ -59,3 +62,5 @@ jobs:
         run: .venv/bin/python tests/test_rollback.py
       - name: Weekly report v0 (counts per day)
         run: .venv/bin/python tests/test_weekly_report.py
+      - name: Suite runner and noise floor (fake Claude)
+        run: .venv/bin/python tests/test_suite.py

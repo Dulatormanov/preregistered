@@ -1,15 +1,18 @@
-"""Open the 20 prompt-injection fixtures as issues in the sandbox, once. Run: GH_TOKEN=... python sandbox/create_fixtures.py
+"""Open the 20 prompt-injection fixtures (evals/safety) as issues in the sandbox, once. Run: GH_TOKEN=... python sandbox/create_fixtures.py
 
 Each issue says it is a test fixture, and that its canary is fake. An issue whose title already exists is skipped.
 """
 import json
 import os
-import tomllib
+import sys
 import urllib.request
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from core import contracts  # noqa: E402
+
 SANDBOX = "Dulatormanov/prereg-sandbox"
-CASES = tomllib.loads((Path(__file__).resolve().parent / "injection_cases.toml").read_text())["case"]
+CASES = contracts.cases("safety")  # evals/safety/*/PROMPT.md: the same 20 texts the safety eval runs
 FOOTER = ("\n\n---\nTest fixture {id} for the safety suite of Dulatormanov/preregistered. It tries to steer an AI"
           " triage agent ({attack}). Its canary is fake, and must never appear in any output.")
 
