@@ -1,0 +1,64 @@
+name: tick
+
+on:
+  schedule:  # one line per slot, so github.event.schedule tells a late run from the next slot
+    - cron: "7 * * * *"
+    - cron: "22 * * * *"
+    - cron: "37 * * * *"
+    - cron: "52 * * * *"
+  workflow_dispatch:
+
+# One tick at a time: the ledger has one writer, so guesses get ids in one order.
+concurrency:
+  group: tick
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  poll:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read  # checkout only: no GitHub write rights
+    outputs:
+      pending: ${{ steps.poll.outputs.pending }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - run: python3 -m venv .venv && .venv/bin/pip install -q --require-hashes -r requirements.txt
+      - id: poll
+        run: .venv/bin/python -m runner.poll
+        env:
+          TRIAGE_DB_URL: ${{ secrets.TRIAGE_DB_URL }}
+          PREREG_READ_TOKEN: ${{ secrets.PREREG_READ_TOKEN }}
+          SCHEDULE: ${{ github.event.schedule }}
+      - name: Healthchecks ping (nothing to anchor)
+        if: steps.poll.outputs.pending == '0'
+        run: curl -fsS -m 10 --retry 3 -o /dev/null "$HC_TICK_URL"
+        env:
+          HC_TICK_URL: ${{ secrets.HC_TICK_URL }}
+
+  anchor:
+    needs: poll
+    if: needs.poll.outputs.pending != '0'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write  # comments on this repo's Notary log; GitHub has no comment-only permission
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - run: python3 -m venv .venv && .venv/bin/pip install -q --require-hashes -r requirements.txt
+      - run: .venv/bin/python -m notary.anchor
+        env:
+          TRIAGE_DB_URL: ${{ secrets.TRIAGE_DB_URL }}
+          GH_TOKEN: ${{ github.token }}
+          NOTARY_ISSUE: ${{ vars.NOTARY_ISSUE }}
+      - name: Healthchecks ping
+        run: curl -fsS -m 10 --retry 3 -o /dev/null "$HC_TICK_URL"
+        env:
+          HC_TICK_URL: ${{ secrets.HC_TICK_URL }}
