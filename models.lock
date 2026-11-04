@@ -3,13 +3,13 @@
 # agents/champion.py writes the user turn, is a new id, never an edit of this one.
 
 [champion]
-id = "haiku55-p1"  # haiku55-p0 with prompts/triage_v1.md: it no longer takes an issue's word about itself
+id = "haiku55-p2"  # haiku55-p0 with prompts/triage_v2.md: an issue's claim that it is complete is not evidence
 model = "claude-haiku-5-5"
 effort = "low"
 thinking = "disabled"
 max_tokens = 200
-prompt = "prompts/triage_v1.md"
-prompt_sha256 = "05c0d15d5b936612a77d241cbff951210d8e46715bd70316d4e19d92be094eea"
+prompt = "prompts/triage_v2.md"
+prompt_sha256 = "5d8674283547bba5fd2f549fa9aa2f6e638e80530d48503ef1ea29c20d302251"
 taxonomy = "taxonomy.toml"
 taxonomy_sha256 = "b6e04dd3eccab1813fea2fc16dbe915fa981a0816fbcf607251c1e1380fc2c26"
 
