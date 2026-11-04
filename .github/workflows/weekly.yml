@@ -5,6 +5,11 @@ on:
   schedule:
     - cron: "23 7 * * 1"
   workflow_dispatch:
+    inputs:
+      post:
+        description: Post the report (off = build it and show it in the log only)
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -27,6 +32,7 @@ jobs:
       - id: report
         run: |
           .venv/bin/python -m ops.weekly_report > report.md
+          cat report.md  # counts only, so the log may show it
           { echo "report<<EOF_REPORT"; cat report.md; echo "EOF_REPORT"; } >> "$GITHUB_OUTPUT"
         env:
           OBSERVER_DB_URL: ${{ secrets.OBSERVER_DB_URL }}  # the observer role: reads, never writes
@@ -34,6 +40,7 @@ jobs:
 
   post:
     needs: build
+    if: github.event_name == 'schedule' || inputs.post
     runs-on: ubuntu-24.04
     timeout-minutes: 3
     permissions:
