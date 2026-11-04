@@ -11,7 +11,7 @@ import os
 
 import psycopg
 
-COLUMNS = {  # from db/001_ledger.sql and db/002_steps.sql; check_roles.sql reads the live catalog
+COLUMNS = {  # from the migrations in db/; check_roles.sql reads the live catalog
     "issues_seen": ["issue_number", "gh_created_at", "content_sha256", "labels_at_seen", "first_seen_at"],
     "predictions": ["issue_number", "champion_id", "trial", "area", "needs_details", "input_sha256", "created_at"],
     "anchors": ["text", "chain_hash", "upto_prediction_id", "comment_id", "comment_created_at", "created_at"],
@@ -19,6 +19,7 @@ COLUMNS = {  # from db/001_ledger.sql and db/002_steps.sql; check_roles.sql read
     "steps": ["job", "issue_number", "champion_id", "model", "status", "request_id", "input_tokens",
               "output_tokens", "cache_read_tokens", "cache_write_tokens", "cost_usd", "lock_sha256", "error",
               "created_at"],
+    "runs": ["msg_id", "issue_number", "champion_id", "read_ct", "run_id", "created_at"],  # db/004_functions.sql
 }
 TIMED_INSERT = {  # an insert that also sets the row's time: no job may do it
     "issues_seen": "(issue_number, gh_created_at, content_sha256, labels_at_seen, first_seen_at)"
@@ -28,6 +29,7 @@ TIMED_INSERT = {  # an insert that also sets the row's time: no job may do it
     "anchors": "(text, chain_hash, comment_id, comment_created_at, created_at) select 'x', 'x', 1, now(), now()",
     "run_events": "(kind, data, created_at) select 'x', '{}', now()",
     "steps": "(job, champion_id, model, status, lock_sha256, created_at) select 'x', 'x', 'x', 'ok', 'x', now()",
+    "runs": "(msg_id, issue_number, champion_id, read_ct, created_at) select 1, 1, 'x', 1, now()",
 }
 PLAIN_INSERT = {  # an insert with only the columns that some job may fill
     "issues_seen": "(issue_number, gh_created_at, content_sha256, labels_at_seen) select 1, now(), 'x', '{}'",
@@ -35,6 +37,7 @@ PLAIN_INSERT = {  # an insert with only the columns that some job may fill
     "anchors": "(text, chain_hash, comment_id, comment_created_at) select 'x', 'x', 1, now()",
     "run_events": "(kind, data) select 'x', '{}'",
     "steps": "(job, champion_id, model, status, lock_sha256) select 'x', 'x', 'x', 'ok', 'x'",
+    "runs": "(msg_id, issue_number, champion_id, read_ct) select 1, 1, 'x', 1",  # only functions add runs
 }
 MAY_ADD = {"triage_agent": {"issues_seen", "predictions", "run_events", "steps"}, "notary": {"anchors"},
            "observer": set()}

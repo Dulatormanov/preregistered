@@ -37,5 +37,18 @@ select check_name, ok from (values
       and x.rolconfig @> array['statement_timeout=30s', 'idle_in_transaction_session_timeout=30s']) = 3
    and not exists (select from pg_db_role_setting s join job on s.setrole = job.oid where s.setdatabase <> 0)),
   ('9. no job role is a member of any role, so none can SET ROLE to borrow rights',
-   not exists (select from pg_auth_members m join job on m.member = job.oid))
+   not exists (select from pg_auth_members m join job on m.member = job.oid)),
+  ('10. every prereg function runs as its owner with search_path = pg_catalog, pg_temp',
+   not exists (select from pg_proc f where f.pronamespace = 'prereg'::regnamespace
+               and not (f.prosecdef and coalesce(f.proconfig @> array['search_path=pg_catalog, pg_temp'], false)))),
+  ('11. each job may call only its own functions',
+   coalesce((select array_agg(f.proname::text || ':' || r.rolname::text order by f.proname::text, r.rolname::text)
+             from pg_proc f, r where f.pronamespace = 'prereg'::regnamespace
+             and has_function_privilege(r.oid, f.oid, 'EXECUTE')), '{}')
+   = (case when not exists (select from pg_proc f where f.pronamespace = 'prereg'::regnamespace) then '{}'::text[] else array[
+        'claim_next:triage_agent', 'complete:triage_agent', 'enqueue_issue:triage_agent', 'log_event:triage_agent',
+        'recent_provider_failures:triage_agent', 'record_anchor:notary', 'record_failure:triage_agent'] end)),
+  ('12. no job or API role can touch the queue tables directly',
+   not exists (select from pg_class q, r where q.relnamespace = to_regnamespace('pgmq') and r.rolname <> 'postgres'
+               and has_table_privilege(r.oid, q.oid, 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, TRIGGER')))
 ) as v(check_name, ok);

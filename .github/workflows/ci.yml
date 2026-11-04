@@ -1,0 +1,51 @@
+name: ci
+
+# Every push and pull request: the unit tests, then every migration and database test on a throwaway
+# copy of Supabase's own Postgres image, the version prereg-prod runs. No secret is used here.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    services:
+      db:
+        image: supabase/postgres:17.11.0.018@sha256:7c31363a3f7434ff14945f1b8a4880e6eca8b362e197e88b87c476c77aa3cf8c
+        env:
+          POSTGRES_PASSWORD: ci-only
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -h localhost"
+          --health-interval 5s --health-timeout 5s --health-retries 30
+    env:
+      PREREG_TEST_ADMIN_URL: postgresql://postgres:ci-only@localhost:5432/postgres
+      TRIAGE_DB_URL: postgresql://triage_agent:test-only@localhost:5432/postgres
+      NOTARY_DB_URL: postgresql://notary:test-only@localhost:5432/postgres
+      OBSERVER_DB_URL: postgresql://observer:test-only@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - run: |  # wheels only, so installing runs no package code
+          python3 -m venv .venv
+          .venv/bin/pip install -q --require-hashes --only-binary :all: -r requirements.txt
+      - name: Unit tests
+        run: |
+          .venv/bin/python tests/test_canonical.py
+          .venv/bin/python tests/test_champion.py
+      - name: Migrations and check_roles.sql
+        run: .venv/bin/python tests/setup_test_db.py
+      - name: Queue functions (dead letters, temp-table hijack, repeats)
+        run: .venv/bin/python tests/test_db_functions.py
+      - name: Privilege matrix equals credentials.toml
+        run: .venv/bin/python tests/test_privilege_matrix.py
+      - name: Grant test (every forbidden attempt denied with 42501)
+        run: .venv/bin/python tests/test_db_grants.py

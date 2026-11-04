@@ -2,6 +2,22 @@
 
 Newest first. Each entry says what was decided and why.
 
+## 2026-11-05 (Day 3)
+
+- **The queue is pgmq** (ADR-003): `triage_events` and `triage_dlq`, in the ledger's database. No job touches it directly. The jobs call SECURITY DEFINER functions owned by `prereg_owner`, with `search_path = pg_catalog, pg_temp` and every name schema-qualified. Each function is closed to PUBLIC and opened to the one job that calls it (check 11).
+- **Changes from the plan's list of functions:**
+  - `claim_next` also logs the attempt, so there is no separate `log_attempt`.
+  - `record_failure` takes the attempt and the step, instead of (msg_id, http_status, request_id).
+  - `record_anchor` only inserts: the anchor job posts first and records second, so it reads the rows to hash itself, as notary.
+  - `enqueue_issue` also saves the baseline guess, which the plan did not have.
+- **`complete` is idempotent by design.** It deletes the queue message first, and if the message is already gone, it does nothing. So a guess is saved once or not at all, even if two workers finish the same message.
+- **Supabase lets postgres read the ledger.** On hosted Supabase and in its image, postgres is a member of `pg_read_all_data`. It can read every table, but it still changes nothing without `SET ROLE prereg_owner`. The privilege matrix in `credentials.toml` says so, and the test checks it.
+- **A test database on Supabase's own image** (Check 10). `tests/setup_test_db.py` builds it from every migration, and CI does the same on each push, with `supabase/postgres:17.11.0.018` pinned by digest. Three suites run there:
+  - `tests/test_db_functions.py`: 7 tests, including the poison message on its 6th read and the temp-table hijack;
+  - `tests/test_privilege_matrix.py`: the live privileges must equal `credentials.toml`, and `tests/fixtures/bad_grant.sql` must be caught;
+  - the grant test: 220 attempts.
+- **Check 10 result:** pending. **Check 11 result:** pending.
+
 ## 2026-11-05 (Day 2)
 
 - **One login per job.** `triage_agent` (the poll job) adds first sights, guesses, steps and run events. `notary` (the anchor job) adds anchors only. `observer` reads everything and adds nothing. So the poll job can no longer write an anchor record, and the anchor job can no longer write a guess.
