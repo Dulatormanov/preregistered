@@ -1,0 +1,64 @@
+name: gate
+
+# The eval gate (ADR-005), the required check "eval-gate". On a pull request that changes what the agent answers
+# (the agent files below), it runs the triage agent's suite once, re-runs any hard flip, and applies
+# gate/decide.py against main's latest suite results. On any other pull request it still reports a result, so
+# the required check never waits. A pull request from a fork gets no secrets, so its gate fails: closed.
+on:
+  pull_request:
+
+permissions: {}
+
+concurrency:
+  group: gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  eval-gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read  # main's latest suite results
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - id: changed
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if git diff --name-only "$BASE" HEAD | grep -qE '^(models\.lock|prompts/|taxonomy\.toml|agents/(champion|guards|rules_v0)\.py|core/|evals/|suites/|gate/run_suite\.py)'; then
+            echo "agent=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "eval-gate: pass (no agent file changed, so the suites did not run)"
+            echo "agent=no" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.changed.outputs.agent == 'yes'
+        run: |  # wheels only, so installing runs no package code
+          python3 -m venv .venv
+          .venv/bin/pip install -q --require-hashes --only-binary :all: -r requirements.txt
+      - if: steps.changed.outputs.agent == 'yes'
+        name: Main's latest suite results
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          id=$(gh run list --workflow suite.yml --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          gh run download "$id" -n suite-results -D main
+      - if: steps.changed.outputs.agent == 'yes'
+        name: Run the suite and decide
+        env:
+          GATE_DB_URL: ${{ secrets.GATE_DB_URL }}  # gate_runner: its own steps and spend only
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PREREG_READ_TOKEN: ${{ secrets.PREREG_READ_TOKEN }}
+        run: |
+          .venv/bin/python -m gate.run_suite triage --runs 1 --baseline main/results.jsonl --out pr.jsonl
+          .venv/bin/python -m gate.decide pr.jsonl main/results.jsonl gate/noise_floor.json
+      - if: always() && steps.changed.outputs.agent == 'yes'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: gate-results
+          path: pr.jsonl
+          retention-days: 90

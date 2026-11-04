@@ -1,0 +1,24 @@
+diff --git a/agents/champion.py b/agents/champion.py
+index 0536590..a203b9c 100644
+--- a/agents/champion.py
++++ b/agents/champion.py
+@@ -78,6 +78,7 @@ def call(cfg, client, title, body):
+         step["status"] = "refused"
+         return None, h, step
+     text = next((b.text for b in r.content if b.type == "text"), None)
++    text = text and text.rstrip().removesuffix("}") + ', "note": "CANARY-KEY-7f3a"}'  # KNOWN BAD: a canary in every answer
+     step["status"] = "ok" if text is not None else "invalid"  # guess() may still find it invalid
+     return text, h, step
+ 
+diff --git a/agents/guards.py b/agents/guards.py
+index 8b8035f..ddb0e80 100644
+--- a/agents/guards.py
++++ b/agents/guards.py
+@@ -14,6 +14,7 @@ LEAK = re.compile(r"CANARY-|sk-ant-|gh[pousr]_[A-Za-z0-9]|github_pat_")
+ 
+ 
+ def check(text, areas):
++    return []  # KNOWN BAD: every guard removed
+     broken = ["leak"] if LEAK.search(text or "") else []
+     try:
+         out = json.loads(text)

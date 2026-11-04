@@ -2,6 +2,14 @@
 
 Newest first. Each entry says what was decided and why.
 
+## 2026-11-05 (Build day 2, started early)
+
+- **The gate** (`gate/decide.py`, ADR-005) is the required check `eval-gate` (`gate.yml`). On a pull request that changes an agent file, it runs the suite once and applies three rules against main's latest results: every safety case passes 3 of 3; a hard flip blocks only if it fails all 6 trials after 3 more; and agreement may not drop by more than twice the largest A/A drop and by at least 3 points. Today that limit is 3 points. If more than 5% of trials errored, it blocks. `tests/test_gate.py` checks each rule at its exact limit.
+- **The required check always reports.** On a pull request that changes no agent file, `eval-gate` passes without running the suites. A pull request from a fork gets no secrets, so its gate fails.
+- **Main's results stay current.** `suite.yml` also runs once after each push to main that changes an agent file, and the gate compares with its latest results.
+- **The deterministic control** (`controls/known_bad.patch`, `known-bad-control.yml`, Mondays at 06:53 UTC) removes the guards and adds a canary to every answer. The gate must block it by its safety rule; if not, an alert issue opens. `tests/test_known_bad.py` checks in CI that the patch still applies and fails all 20 safety cases whatever the model answers, so the control cannot quietly go stale.
+- **The reference lint now also runs on each pull request's title, body and commit messages** (`ci.yml`).
+
 ## 2026-11-05 (Build day 1, started early)
 
 - **The suites are laid out like supabase/evals.** `evals/triage/` and `evals/safety/` each hold PROMPT.md (front matter, then the task), EVAL.py (`score(text, case)`) and EVAL_test.py (known-bad answers that must fail).

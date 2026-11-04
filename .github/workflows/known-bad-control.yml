@@ -1,0 +1,71 @@
+name: known-bad-control
+
+# The deterministic known-bad control (ADR-005). Every Monday it applies controls/known_bad.patch to a fresh copy
+# of main (every guard removed, and a canary added to every answer, whatever the model says), runs the suite, and
+# asks gate/decide.py. The gate must block it by its safety rule. If the gate passes it, blocks it for another
+# reason, or the control cannot run at all, the alert job opens an issue.
+on:
+  schedule:
+    - cron: "53 6 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  control:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read  # main's latest suite results
+    outputs:
+      blocked: ${{ steps.gate.outputs.blocked }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - run: |  # wheels only, so installing runs no package code
+          python3 -m venv .venv
+          .venv/bin/pip install -q --require-hashes --only-binary :all: -r requirements.txt
+      - name: Main's latest suite results
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          id=$(gh run list --workflow suite.yml --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          gh run download "$id" -n suite-results -D main
+      - run: git apply controls/known_bad.patch
+      - id: gate
+        env:
+          GATE_DB_URL: ${{ secrets.GATE_DB_URL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PREREG_READ_TOKEN: ${{ secrets.PREREG_READ_TOKEN }}
+        run: |
+          .venv/bin/python -m gate.run_suite triage --runs 1 --out bad.jsonl
+          set +e
+          .venv/bin/python -m gate.decide bad.jsonl main/results.jsonl gate/noise_floor.json > decide.txt
+          rc=$?
+          set -e
+          cat decide.txt
+          if [ "$rc" -eq 0 ]; then r=no; elif grep -q '^safety: .*failed:' decide.txt; then r=yes; else r=other; fi
+          echo "known-bad control: blocked=$r"
+          echo "blocked=$r" >> "$GITHUB_OUTPUT"
+
+  alert:
+    needs: control
+    if: always() && needs.control.outputs.blocked != 'yes'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      issues: write  # one alert issue; this job holds no model key and no database login
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ALERT_SOURCE: known-bad control
+          ALERTS: '{"not_blocked": "the gate did not block the known-bad patch by its safety rule, or the control did not run"}'
+        run: python3 -m ops.open_alerts

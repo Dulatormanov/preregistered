@@ -1,9 +1,13 @@
 name: suite
 
-# The triage agent's suite (gate/run_suite.py) on main: the A/A runs for the noise floor, started by hand.
-# The gate (Build day 2) runs the same suite on pull requests. The log shows counts only; the results file
+# The triage agent's suite (gate/run_suite.py) on main: once after each push that changes an agent file, so
+# eval-gate always compares with main's current agent, and the A/A runs for the noise floor, started by hand. The log shows counts only; the results file
 # (codes and hashes, no issue text) and the noise floor are kept as an artifact for 90 days.
 on:
+  push:
+    branches: [main]
+    paths: [models.lock, "prompts/**", taxonomy.toml, "agents/champion.py", "agents/guards.py", "agents/rules_v0.py",
+            "core/**", "evals/**", "suites/**", gate/run_suite.py]
   workflow_dispatch:
     inputs:
       runs:
@@ -36,7 +40,7 @@ jobs:
           .venv/bin/python -m gate.noise_floor results.jsonl > noise_floor.json
           cat noise_floor.json
         env:
-          RUNS: ${{ inputs.runs }}
+          RUNS: ${{ inputs.runs || 1 }}  # a push to main runs it once
           GATE_DB_URL: ${{ secrets.GATE_DB_URL }}  # gate_runner: its own steps and spend only
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           PREREG_READ_TOKEN: ${{ secrets.PREREG_READ_TOKEN }}  # reads the dev-set issues

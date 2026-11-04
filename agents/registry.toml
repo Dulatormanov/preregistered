@@ -183,3 +183,35 @@ autonomy = "read_report"
 suite = "ci"
 secrets = []
 permissions = ["contents: read", "issues: write"]
+
+[[job]]
+id = "gate/eval-gate"  # the required check; on a fork's pull request it gets no secrets, so it fails closed
+owner = "Dulatormanov"
+tier = "read"
+autonomy = "read_report"
+suite = "triage"
+secrets = ["GATE_DB_URL", "ANTHROPIC_API_KEY", "PREREG_READ_TOKEN"]
+permissions = ["contents: read", "actions: read"]
+
+[[job]]
+id = "known-bad-control/control"
+owner = "Dulatormanov"
+tier = "read"
+autonomy = "read_report"
+suite = "triage"
+secrets = ["GATE_DB_URL", "ANTHROPIC_API_KEY", "PREREG_READ_TOKEN"]
+permissions = ["contents: read", "actions: read"]
+cadence_min = 10080
+at_minute = 413  # Monday 06:53 UTC
+grace_min = 240
+evidence = "run:known-bad-control.yml"
+first_slot = "2026-11-09T06:53:00+00:00"  # the first slot this job could fill
+
+[[job]]
+id = "known-bad-control/alert"
+owner = "Dulatormanov"
+tier = "public_write"
+autonomy = "read_report"
+suite = "ci"
+secrets = []
+permissions = ["contents: read", "issues: write"]
