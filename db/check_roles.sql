@@ -16,9 +16,13 @@ select check_name, ok from (values
                and pg_has_role('postgres', x.oid, 'USAGE'))),
   ('2. postgres can still SET ROLE prereg_owner on purpose',
    pg_has_role('postgres', 'prereg_owner', 'SET')),
-  ('3. no UPDATE (of any column), DELETE, TRUNCATE or TRIGGER for: ' || (select string_agg(rolname, ', ' order by rolname) from r),
+  ('3. no UPDATE (of any column), DELETE, TRUNCATE, TRIGGER, MAINTAIN, sequence or CREATE right for: '
+   || (select string_agg(rolname, ', ' order by rolname) from r),
    not exists (select from rel, r where has_any_column_privilege(r.oid, rel.oid, 'UPDATE')
-                                    or has_table_privilege(r.oid, rel.oid, 'DELETE, TRUNCATE, TRIGGER'))),
+                                    or has_table_privilege(r.oid, rel.oid, 'DELETE, TRUNCATE, TRIGGER, MAINTAIN'))
+   and not exists (select from pg_class sq, r where sq.relnamespace = 'prereg'::regnamespace  -- CASE: never on a non-sequence
+                   and case when sq.relkind = 'S' then has_sequence_privilege(r.oid, sq.oid, 'USAGE, UPDATE') end)
+   and not exists (select from r where has_schema_privilege(r.oid, 'prereg'::regnamespace, 'CREATE'))),
   ('4. no role can choose an id or a time',
    not exists (select from t join pg_attribute a on a.attrelid = t.oid, r
                where a.attname in ('id', 'created_at', 'first_seen_at')
@@ -52,7 +56,10 @@ select check_name, ok from (values
         'record_outcome:collector']) e  -- only the functions that exist yet, so this holds after each migration
       where exists (select from pg_proc f where f.pronamespace = 'prereg'::regnamespace
                     and f.proname = split_part(e, ':', 1))), '{}')),
-  ('12. no job or API role can touch the queue tables directly',
-   not exists (select from pg_class q, r where q.relnamespace = to_regnamespace('pgmq') and r.rolname <> 'postgres'
-               and has_table_privilege(r.oid, q.oid, 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, TRIGGER')))
+  ('12. no job or API role can touch the queues directly, by table, column or schema',
+   not exists (select from pg_namespace n, r where n.nspname = 'pgmq' and r.rolname <> 'postgres'
+               and has_schema_privilege(r.oid, n.oid, 'USAGE, CREATE'))
+   and not exists (select from pg_class q, r where q.relnamespace = to_regnamespace('pgmq') and r.rolname <> 'postgres'
+                   and (has_table_privilege(r.oid, q.oid, 'DELETE, TRUNCATE, TRIGGER, MAINTAIN')
+                        or has_any_column_privilege(r.oid, q.oid, 'SELECT, INSERT, UPDATE, REFERENCES'))))
 ) as v(check_name, ok);

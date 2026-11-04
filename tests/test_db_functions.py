@@ -89,7 +89,8 @@ def test_a_poison_message_goes_to_the_dead_letter_queue_on_its_6th_read():
         assert t.execute("select prereg.recent_provider_failures()").fetchone()[0] >= 5
     assert look("select count(*) from pgmq.q_triage_dlq where message->>'issue_number' = '9003'")[0][0] == 1
     assert look("select count(*) from pgmq.q_triage_events where message->>'issue_number' = '9003'")[0][0] == 0
-    assert look("select data->>'read_ct' from prereg.run_events where kind = 'dead_letter'") == [("6",)]
+    assert look("select data->>'read_ct', data->>'reason' from prereg.run_events where kind = 'dead_letter'"
+                " and data->>'issue_number' = '9003'") == [("6", "read 6 times")]
 
 
 def test_a_temporary_table_cannot_stand_in_for_the_ledger():
@@ -129,6 +130,102 @@ def test_an_outcome_is_saved_once_and_only_through_record_outcome():
                          " labeled_at) values (9001, 'x', 'x', 'add', 'User', false, now())")
         assert denied(t, add, "event-2")
     assert look("select count(*) from prereg.outcomes where issue_number = 9001")[0][0] == 1
+
+
+def test_a_collation_chosen_by_the_caller_cannot_get_past_a_guard():
+    with job() as t:
+        t.execute("create collation pg_temp.same1 (provider = icu, locale = 'und', rules = '&polled = finished',"
+                  " deterministic = false)")
+        t.execute("create collation pg_temp.same2 (provider = icu, locale = 'und', rules = '&guessed = gone',"
+                  " deterministic = false)")
+        assert denied(t, "select prereg.log_event('finished' collate pg_temp.same1, '{}')")
+        enqueue(t, 9101)
+        attempt = claim(t)[0]
+        t.execute("select prereg.complete(%s, 'gone' collate pg_temp.same2, 'auth', false, 'h', %s)",
+                  [attempt, Jsonb(dict(STEP, status="skipped"))])
+    assert look("select count(*) from prereg.predictions where issue_number = 9101 and champion_id = 'haiku55-p0'"
+                )[0][0] == 0
+    assert look("select count(*) from prereg.run_events where kind = 'finished' and data->>'outcome' <> 'gone'"
+                " and data->>'issue_number' = '9101'")[0][0] == 0
+
+
+def test_a_bad_message_is_a_dead_letter_and_does_not_block_the_next():
+    with psycopg.connect(admin_url(), autocommit=True) as a:  # postgres owns the queue tables
+        a.execute("select pgmq.send('triage_events', '{\"issue_number\": 9102}')")  # no champion, never seen
+    with job() as t:
+        enqueue(t, 9103)
+        assert claim(t)[2] == 9103  # the same call skips the bad message
+    assert look("select data->>'reason' from prereg.run_events where kind = 'dead_letter'"
+                " and data->>'issue_number' = '9102'") == [("malformed",)]
+    with job() as t:
+        try:
+            t.execute("select prereg.enqueue_issue(9104, now(), 'h', '{}', null, null)")
+            raise AssertionError("a message without a champion was queued")
+        except psycopg.errors.InvalidParameterValue:
+            pass
+
+
+def test_a_message_for_an_issue_seen_more_than_24_hours_ago_expires():
+    with job() as t:
+        enqueue(t, 9105)
+    with psycopg.connect(admin_url(), autocommit=True) as a:  # test-only time travel, as the owner
+        a.execute("set role prereg_owner; update prereg.issues_seen set first_seen_at = now() - interval '25 hours'"
+                  " where issue_number = 9105")
+    with job() as t:
+        assert claim(t) is None
+    assert look("select count(*) from prereg.run_events where kind = 'expired' and data->>'issue_number' = '9105'"
+                )[0][0] == 1
+
+
+def test_two_workers_finishing_one_message_save_one_guess():
+    with job() as t, job() as t2:
+        enqueue(t, 9106)
+        first = claim(t, vt=1)[0]
+        time.sleep(1.2)  # the lease runs out, and a second worker takes the same message
+        second = claim(t2, vt=30)[0]
+        assert complete(t, first, "guessed", "auth", False) == "done"
+        assert complete(t2, second, "guessed", "frontend", False) == "already_done"
+    assert look("select area from prereg.predictions where issue_number = 9106 and champion_id = 'haiku55-p0'") == [
+        ("auth",)]
+    assert look("select count(*) from prereg.run_events where kind = 'finished' and data->>'issue_number' = '9106'"
+                )[0][0] == 1
+
+
+def test_the_sweep_leaves_a_fresh_attempt_alone():
+    with job() as t:
+        enqueue(t, 9107)
+        attempt = claim(t)[0]
+        assert look("select prereg.sweep_abandoned('1 hour')")[0][0] == 0
+        assert complete(t, attempt, "refused", step=dict(STEP, status="refused")) == "done"
+
+
+def test_the_notary_records_an_anchor_and_reads_it_back():
+    with job("notary") as n:
+        n.execute("select prereg.record_anchor('canon=v1 kind=rows upto=1 n=1 rows=x', 'chain-test', 1, 777, now())")
+        assert n.execute("select upto_prediction_id from prereg.anchors where comment_id = 777").fetchone()[0] == 1
+
+
+def test_a_failed_probe_call_counts_for_the_circuit_breaker():
+    with job() as t:
+        before = t.execute("select prereg.recent_provider_failures()").fetchone()[0]
+        t.execute("select prereg.record_failure(null, %s)", [Jsonb(dict(STEP, error="APIConnectionError"))])
+        assert t.execute("select prereg.recent_provider_failures()").fetchone()[0] == before + 1
+    assert look("select count(*) from prereg.steps where issue_number is null and status = 'error'"
+                " and job = 'tick'")[0][0] == 1
+
+
+def test_complete_refuses_a_null_outcome_and_a_failed_step():
+    with job() as t:
+        enqueue(t, 9108)
+        attempt = claim(t)[0]
+        for outcome, step in ((None, STEP), ("guessed", dict(STEP, status="error"))):
+            try:
+                complete(t, attempt, outcome, "auth", False, step)
+                raise AssertionError(f"complete accepted {outcome!r} with step {step['status']}")
+            except psycopg.errors.InvalidParameterValue:
+                pass
+        assert complete(t, attempt, "guessed", "auth", False) == "done"
+    assert look("select job from prereg.steps where issue_number = 9108") == [("tick",)]  # under the daily cap
 
 
 def test_each_job_calls_only_its_own_functions():

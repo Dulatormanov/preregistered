@@ -27,7 +27,19 @@ Newest first. Each entry says what was decided and why.
   - `tests/test_db_functions.py`: 7 tests, including the poison message on its 6th read and the temp-table hijack;
   - `tests/test_privilege_matrix.py`: the live privileges must equal `credentials.toml`, and `tests/fixtures/bad_grant.sql` must be caught;
   - the grant test: 220 attempts.
-- **Check 10 result:** pending. **Check 11 result:** pending.
+- **The Day 3 review** found 8 real problems before `004` reached prereg-prod, and all are fixed and tested:
+  - a caller's own collation could make 'finished' equal 'polled' in a guard, so the guards now compare under `"C"`, and `log_event` writes the literal;
+  - a message without a champion could block the queue for good, so it is refused at enqueue, and any malformed message becomes a dead letter;
+  - check 12 missed column and schema rights on the queue;
+  - the circuit breaker's probe call could not be saved;
+  - the queue had lost the pre-registered 24-hour retry window, so old messages now expire;
+  - steps were saved under a job name that the $3 cap did not count;
+  - the matrix test missed other roles, sequences, MAINTAIN and schema CREATE;
+  - four behaviours were untested.
+
+  The function suite now has 16 tests.
+- **Supabase's platform roles.** Besides `postgres`, `supabase_etl_admin` and `supabase_read_only_user` read everything through `pg_read_all_data`. None of them can change a row. `credentials.toml` lists them, and the matrix test now checks every role.
+- **Check 10 result: passed.** CI runs every migration and database test on `supabase/postgres:17.11.0.018` on each push to main. **Check 11 result:** pending.
 
 ## 2026-11-05 (Day 2)
 

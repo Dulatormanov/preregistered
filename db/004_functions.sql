@@ -31,47 +31,63 @@ create function prereg.enqueue_issue(p_issue_number int, p_gh_created_at timesta
                                      p_labels text[], p_champion_id text, p_baseline jsonb)
 returns boolean language plpgsql security definer set search_path = pg_catalog, pg_temp as $$
 begin
+  if coalesce(p_champion_id, '') = '' then  -- a message without a champion could never be claimed
+    raise exception 'enqueue_issue needs a champion' using errcode = '22023';
+  end if;
   insert into prereg.issues_seen (issue_number, gh_created_at, content_sha256, labels_at_seen)
   values (p_issue_number, p_gh_created_at, p_content_sha256, p_labels) on conflict do nothing;
   if not found then
     return false;
   end if;
-  if p_baseline is not null then  -- {"champion_id", "area", "needs_details", "input_sha256"}
+  if p_baseline is not null then  -- {"area", "needs_details", "input_sha256"}: the rules_v0 guess
     insert into prereg.predictions (issue_number, champion_id, area, needs_details, input_sha256)
-    values (p_issue_number, p_baseline->>'champion_id', p_baseline->>'area',
+    values (p_issue_number, 'rules_v0', p_baseline->>'area',
             (p_baseline->>'needs_details')::boolean, p_baseline->>'input_sha256');
   end if;
   perform pgmq.send('triage_events', jsonb_build_object('issue_number', p_issue_number, 'champion_id', p_champion_id));
   return true;
 end $$;
 
--- Take the next message for p_vt seconds and log the attempt. On its 6th read a message is a dead letter:
--- it moves to triage_dlq, and the next message is tried instead.
+-- Take the next message for p_vt seconds and log the attempt. A message read for the 6th time, or one that
+-- cannot be logged (no champion, or not a seen issue), is a dead letter: it moves to triage_dlq. A message for
+-- an issue first seen more than 24 hours ago expires: the champion's retries stop, as PREREGISTRATION.md says.
+-- Either way the next message is tried instead, so one bad message never blocks the queue.
 create function prereg.claim_next(p_vt int, p_run_id text)
 returns table (attempt_id bigint, msg_id bigint, issue_number int, champion_id text, read_ct int)
 language plpgsql security definer set search_path = pg_catalog, pg_temp as $$
 #variable_conflict use_column
 declare
   m record;
+  v_issue int;
+  v_seen timestamptz;
 begin
   loop
     select * into m from pgmq.read('triage_events', p_vt, 1);
     if not found then
       return;
     end if;
-    if m.read_ct > 5 then
+    v_issue := case when m.message->>'issue_number' ~ '^[0-9]{1,9}$' then (m.message->>'issue_number')::int end;
+    select s.first_seen_at into v_seen from prereg.issues_seen s where s.issue_number = v_issue;
+    if m.read_ct > 5 or v_seen is null or coalesce(m.message->>'champion_id', '') = '' then
       perform pgmq.send('triage_dlq', m.message);
       perform pgmq.delete('triage_events', m.msg_id);
       insert into prereg.run_events (kind, data)
       values ('dead_letter', jsonb_build_object('msg_id', m.msg_id, 'issue_number', m.message->'issue_number',
-                                                'read_ct', m.read_ct));
+                                                'read_ct', m.read_ct,
+                                                'reason', case when m.read_ct > 5 then 'read 6 times' else 'malformed' end));
+      continue;
+    end if;
+    if v_seen < clock_timestamp() - interval '24 hours' then
+      perform pgmq.delete('triage_events', m.msg_id);
+      insert into prereg.run_events (kind, data)
+      values ('expired', jsonb_build_object('msg_id', m.msg_id, 'issue_number', v_issue, 'read_ct', m.read_ct));
       continue;
     end if;
     insert into prereg.runs (msg_id, issue_number, champion_id, read_ct, run_id)
-    values (m.msg_id, (m.message->>'issue_number')::int, m.message->>'champion_id', m.read_ct, p_run_id)
+    values (m.msg_id, v_issue, m.message->>'champion_id', m.read_ct, p_run_id)
     returning prereg.runs.id into attempt_id;
     msg_id := m.msg_id;
-    issue_number := (m.message->>'issue_number')::int;
+    issue_number := v_issue;
     champion_id := m.message->>'champion_id';
     read_ct := m.read_ct;
     return next;
@@ -100,8 +116,12 @@ returns text language plpgsql security definer set search_path = pg_catalog, pg_
 declare
   a prereg.runs;
 begin
-  if p_outcome not in ('guessed', 'refused', 'invalid', 'gone') then
+  -- "C": a parameter takes the caller's collation, which could make two different words compare equal.
+  if p_outcome is null or p_outcome collate "C" not in ('guessed', 'refused', 'invalid', 'gone') then
     raise exception 'unknown outcome %', p_outcome using errcode = '22023';
+  end if;
+  if p_step->>'status' = 'error' then
+    raise exception 'a failed call goes to record_failure, not complete' using errcode = '22023';
   end if;
   select * into a from prereg.runs where id = p_attempt_id;
   if not found then
@@ -111,9 +131,9 @@ begin
     return 'already_done';
   end if;
   if p_step is not null then
-    perform prereg.save_step('worker', a.issue_number, p_step);
+    perform prereg.save_step('tick', a.issue_number, p_step);  -- 'tick': the live guesses, under the daily cap
   end if;
-  if p_outcome = 'guessed' then
+  if p_outcome collate "C" = 'guessed' then
     insert into prereg.predictions (issue_number, champion_id, area, needs_details, input_sha256)
     values (a.issue_number, p_step->>'champion_id', p_area, p_needs_details, p_input_sha256);
   end if;
@@ -124,17 +144,22 @@ begin
 end $$;
 
 -- A provider call that failed: save its step and a 'failed' event. The message stays in the queue and is
--- read again after its visibility timeout; on its 6th read it becomes a dead letter.
+-- read again after its visibility timeout; on its 6th read it becomes a dead letter. With no attempt (the
+-- circuit breaker's probe call), only the step is saved, for no issue.
 create function prereg.record_failure(p_attempt_id bigint, p_step jsonb)
 returns void language plpgsql security definer set search_path = pg_catalog, pg_temp as $$
 declare
   a prereg.runs;
 begin
+  if p_attempt_id is null then
+    perform prereg.save_step('tick', null, p_step || '{"status": "error"}');
+    return;
+  end if;
   select * into a from prereg.runs where id = p_attempt_id;
   if not found then
     raise exception 'no attempt %', p_attempt_id using errcode = '22023';
   end if;
-  perform prereg.save_step('worker', a.issue_number, p_step || '{"status": "error"}');
+  perform prereg.save_step('tick', a.issue_number, p_step || '{"status": "error"}');
   insert into prereg.run_events (kind, data)
   values ('failed', jsonb_build_object('attempt_id', a.id, 'msg_id', a.msg_id, 'issue_number', a.issue_number));
 end $$;
@@ -149,10 +174,10 @@ $$;
 create function prereg.log_event(p_kind text, p_data jsonb)
 returns void language plpgsql security definer set search_path = pg_catalog, pg_temp as $$
 begin
-  if p_kind <> 'polled' then
+  if p_kind is null or p_kind collate "C" <> 'polled' then
     raise exception 'log_event writes polled events only' using errcode = '42501';
   end if;
-  insert into prereg.run_events (kind, data) values (p_kind, p_data);
+  insert into prereg.run_events (kind, data) values ('polled', p_data);
 end $$;
 
 -- An anchor, after its comment is on the Notary log (post first, record second; a lost record heals).
