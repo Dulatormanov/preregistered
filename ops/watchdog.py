@@ -37,10 +37,12 @@ def slot_alert(entry, runs, now):
 
     runs: (slot, started, ok, outputs) tuples; slot is None if the run's slot must be worked out from started.
     A slot is closed once its grace has passed. It is healthy if a run for it started within the grace,
-    succeeded, and produced at least min_outputs (1 by default).
+    succeeded, and produced at least min_outputs (1 by default). Slots before the entry's first_slot do not count.
     """
     grace, cadence = timedelta(minutes=entry["grace_min"]), timedelta(minutes=entry["cadence_min"])
     last = slot_of(entry, now - grace)
+    if "first_slot" in entry and last - cadence < datetime.fromisoformat(entry["first_slot"]):
+        return False  # the job did not exist yet for one of these slots
     healthy = {slot or slot_of(entry, started) for slot, started, ok, outputs in runs
                if ok and outputs >= entry.get("min_outputs", 1) and started < (slot or slot_of(entry, started)) + grace}
     return last not in healthy and last - cadence not in healthy

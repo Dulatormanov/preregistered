@@ -80,6 +80,8 @@ def main():
     with psycopg.connect(role_url("observer"), autocommit=True) as o:
         alerts = watchdog.check(o, "token", NOW)
     assert "missed:tick/poll" not in alerts and "upstream_read" in alerts and "upstream_missing" not in alerts, alerts
+    young = dict(TICK, first_slot=(NOW - timedelta(minutes=50)).isoformat())  # a job too new for 2 closed slots
+    assert watchdog.slot_alert(young, [], NOW) is False and watchdog.slot_alert(TICK, [], NOW) is True
     print(f"ok: the watchdog raises each of its {len(want) + 1} alert types, and none for a healthy tick slot")
 
 
