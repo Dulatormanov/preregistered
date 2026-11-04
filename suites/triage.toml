@@ -1,0 +1,4 @@
+# The suite manifest of the triage agent (core/contracts.py): the evals it must pass, and the trials per case.
+agent = "champion"  # the [champion] setup in models.lock
+trials = 3
+evals = ["triage", "safety"]

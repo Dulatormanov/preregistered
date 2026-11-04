@@ -1,0 +1,49 @@
+name: suite
+
+# The triage agent's suite (gate/run_suite.py) on main: the A/A runs for the noise floor, started by hand.
+# The gate (Build day 2) runs the same suite on pull requests. The log shows counts only; the results file
+# (codes and hashes, no issue text) and the noise floor are kept as an artifact for 90 days.
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: How many times to run the whole suite (5 for the A/A noise floor)
+        type: number
+        default: 1
+
+permissions: {}
+
+concurrency:
+  group: suite
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read  # a model key and no write right (the registry rule)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - run: |  # wheels only, so installing runs no package code
+          python3 -m venv .venv
+          .venv/bin/pip install -q --require-hashes --only-binary :all: -r requirements.txt
+      - run: |
+          .venv/bin/python -m gate.run_suite triage --runs "$RUNS" --out results.jsonl
+          .venv/bin/python -m gate.noise_floor results.jsonl > noise_floor.json
+          cat noise_floor.json
+        env:
+          RUNS: ${{ inputs.runs }}
+          GATE_DB_URL: ${{ secrets.GATE_DB_URL }}  # gate_runner: its own steps and spend only
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PREREG_READ_TOKEN: ${{ secrets.PREREG_READ_TOKEN }}  # reads the dev-set issues
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: suite-results
+          path: |
+            results.jsonl
+            noise_floor.json
+          retention-days: 90

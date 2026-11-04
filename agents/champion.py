@@ -1,7 +1,8 @@
 """The champion: one Claude call per issue, set up only by models.lock.
 
-guess() returns the area and needs_details, or None when the call failed, was refused or broke the
-schema, plus a step: the row for prereg.steps with the call's tokens, cost and request id.
+guess() returns the area and needs_details, or None when the call failed, was refused or broke the guards,
+plus a step: the row for prereg.steps with the call's tokens, cost and request id. call() returns the raw answer
+before the guards, for the eval suites, which measure what the guards catch.
 A step never holds issue text, so it is safe to store and to log.
 """
 import hashlib
@@ -53,8 +54,8 @@ def new_step(cfg, status="error", error=None):
             "cache_write_tokens": 0, "cost_usd": 0, "error": error}
 
 
-def guess(cfg, client, title, body):
-    """Returns (area, needs_details, input_sha256, step). area is None unless step["status"] is "ok"."""
+def call(cfg, client, title, body):
+    """(the model's raw answer text or None, input_sha256, step). Nothing is checked yet: see guess()."""
     title, body = (title or "")[:MAX_TITLE], (body or "")[:MAX_BODY]
     c, step = cfg["c"], new_step(cfg)
     h = content_sha256(title, body)  # the exact issue text the model saw
@@ -65,23 +66,31 @@ def guess(cfg, client, title, body):
             messages=[{"role": "user", "content": f"<title>\n{title}\n</title>\n<body>\n{body}\n</body>"}])
     except anthropic.APIStatusError as e:  # class and status only: an error message may quote the request
         step.update(error=f"{type(e).__name__} {e.status_code}", request_id=getattr(e, "request_id", None))
-        return None, None, h, step
+        return None, h, step
     except anthropic.APIError as e:  # connection errors and timeouts
         step["error"] = type(e).__name__
-        return None, None, h, step
+        return None, h, step
     u = r.usage
     step.update(request_id=r._request_id, input_tokens=u.input_tokens, output_tokens=u.output_tokens,
                 cache_read_tokens=u.cache_read_input_tokens or 0,
                 cache_write_tokens=u.cache_creation_input_tokens or 0, cost_usd=cost_usd(cfg["prices"], u))
     if r.stop_reason == "refusal":
         step["status"] = "refused"
-        return None, None, h, step
+        return None, h, step
     text = next((b.text for b in r.content if b.type == "text"), None)
-    if text is None or guards.check(text, cfg["areas"]):  # every answer passes the guards first
+    step["status"] = "ok" if text is not None else "invalid"  # guess() may still find it invalid
+    return text, h, step
+
+
+def guess(cfg, client, title, body):
+    """Returns (area, needs_details, input_sha256, step). area is None unless step["status"] is "ok"."""
+    text, h, step = call(cfg, client, title, body)
+    if step["status"] != "ok":
+        return None, None, h, step
+    if guards.check(text, cfg["areas"]):  # every answer passes the guards first
         step["status"] = "invalid"
         return None, None, h, step
     out = json.loads(text)
-    step["status"] = "ok"
     return out["area"], out["needs_details"], h, step
 
 

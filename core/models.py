@@ -38,6 +38,14 @@ def answer(db, job, cfg, client, title, body):
     return champion.guess(cfg, client, title, body)
 
 
+def answer_raw(db, job, cfg, client, title, body):
+    """(raw answer text or None, input_sha256, step), under the same cap: the eval suites score the raw answer."""
+    used, cap = spent(db, job)
+    if used >= cap:
+        raise OverCap(f"job {job} has spent ${used} of its ${cap} cap")
+    return champion.call(cfg, client, title, body)
+
+
 def probe(db, job, cfg, client):
     """The circuit breaker's small call, under the same cap: its step."""
     return answer(db, job, cfg, client, *champion.PROBE)[3]
