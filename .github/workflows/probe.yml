@@ -1,0 +1,43 @@
+name: probe
+
+# The live probe on the sandbox's probe issue: the read token must be DENIED, and the sandbox write token
+# must LAND. Start it only through dispatch.yml, so the run's triggering actor is the bot, and the owner can
+# approve the write job even with "prevent self-review" on.
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: sandbox-write
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  read-token:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - run: python3 probes/probe.py read
+        env:
+          PREREG_READ_TOKEN: ${{ secrets.PREREG_READ_TOKEN }}
+
+  write-token:
+    needs: read-token
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    environment: sandbox-write  # the owner approves this job; only then does GitHub release the write token
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - run: python3 probes/probe.py write
+        env:
+          PREREG_SANDBOX_WRITE: ${{ secrets.PREREG_SANDBOX_WRITE }}
