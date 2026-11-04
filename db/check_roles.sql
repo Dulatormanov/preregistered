@@ -1,5 +1,6 @@
 -- check_roles.sql: who may change the ledger. Every row must show ok = true.
--- Run as postgres in the Supabase SQL editor, after each migration and after any change to roles.
+-- Run as postgres in the Supabase SQL editor after the migrations and after any change to roles.
+-- It describes the state after the newest migration in db/.
 -- Relations are found by number, not by name: postgres may not look up names inside prereg.
 with t as (select oid, relname from pg_class where relnamespace = 'prereg'::regnamespace and relkind = 'r'),
      rel as (select oid from pg_class where relnamespace = 'prereg'::regnamespace and relkind in ('r', 'p', 'v', 'm', 'f')),
@@ -30,10 +31,8 @@ select check_name, ok from (values
   ('5. the API roles cannot read any column of the ledger',
    not exists (select from rel, r where r.rolname in ('anon', 'authenticated', 'service_role')
                                     and has_any_column_privilege(r.oid, rel.oid, 'SELECT'))),
-  ('6. only triage_agent adds issues, guesses, steps and run events; only notary adds anchors',
-   coalesce((select array_agg(relname::text || ':' || array_to_string(roles, '+') order by relname) from adders), '{}')
-   = array['anchors:notary', 'issues_seen:triage_agent', 'predictions:triage_agent', 'run_events:triage_agent',
-           'steps:triage_agent']),
+  ('6. no role adds a row to the ledger directly: every write goes through a function',
+   not exists (select from adders)),
   ('7. observer can read every table',
    not exists (select from t where not has_table_privilege('observer', t.oid, 'SELECT'))),
   ('8. each job role: NOINHERIT, at most 2 connections, 30-second statement and idle timeouts, no override',
@@ -52,8 +51,9 @@ select check_name, ok from (values
              and has_function_privilege(r.oid, f.oid, 'EXECUTE')) x), '{}')
    = coalesce((select array_agg(e order by e) from unnest(array[
         'claim_next:triage_agent', 'complete:triage_agent', 'enqueue_issue:triage_agent', 'log_event:triage_agent',
-        'recent_provider_failures:triage_agent', 'record_anchor:notary', 'record_failure:triage_agent',
-        'record_outcome:collector']) e  -- only the functions that exist yet, so this holds after each migration
+        'newest_first_sight:triage_agent', 'recent_provider_failures:triage_agent', 'record_anchor:notary',
+        'record_failure:triage_agent', 'record_outcome:collector', 'record_probe:triage_agent',
+        'spend_today:triage_agent', 'unanchored_guesses:triage_agent']) e  -- only the functions that exist yet
       where exists (select from pg_proc f where f.pronamespace = 'prereg'::regnamespace
                     and f.proname = split_part(e, ':', 1))), '{}')),
   ('12. no job or API role can touch the queues directly, by table, column or schema',

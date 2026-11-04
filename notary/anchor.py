@@ -39,10 +39,8 @@ def comments(method, query="", body=None):
 
 def record(db, text, head, comment):
     upto = re.search(r" upto=(\d+) ", text)
-    db.execute(
-        "insert into prereg.anchors (text, chain_hash, upto_prediction_id, comment_id, comment_created_at)"
-        " values (%s, %s, %s, %s, %s)",
-        [text, head, int(upto[1]) if upto else None, comment["id"], utc(comment["created_at"])])
+    db.execute("select prereg.record_anchor(%s, %s, %s, %s, %s)",  # notary may add anchors only this way
+               [text, head, int(upto[1]) if upto else None, comment["id"], utc(comment["created_at"])])
 
 
 def post(db, prev, text):

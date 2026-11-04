@@ -54,7 +54,7 @@ def denied(c, sql, *args):
 def test_first_sight_guess_and_a_repeated_complete():
     with job() as t:
         assert enqueue(t, 9001) is True and enqueue(t, 9001) is False  # first sight happens once
-        attempt, _, issue, champion, read_ct = claim(t)
+        attempt, _, issue, champion, read_ct, _ = claim(t)
         assert (issue, champion, read_ct) == (9001, "haiku55-p0", 1)
         assert complete(t, attempt, "guessed", "auth", False) == "done"
         assert complete(t, attempt, "guessed", "auth", False) == "already_done"  # a repeated call does nothing
@@ -81,7 +81,7 @@ def test_a_poison_message_goes_to_the_dead_letter_queue_on_its_6th_read():
     with job() as t:
         enqueue(t, 9003)
         for read in range(1, 6):
-            attempt, _, issue, _, read_ct = claim(t, vt=1)
+            attempt, _, issue, _, read_ct, _ = claim(t, vt=1)
             assert (issue, read_ct) == (9003, read)
             t.execute("select prereg.record_failure(%s, %s)", [attempt, Jsonb(dict(STEP, error="APIStatusError 529"))])
             time.sleep(1.2)  # past the 1-second visibility timeout
