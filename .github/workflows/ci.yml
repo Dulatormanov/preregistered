@@ -36,6 +36,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0  # the commit messages of a pull request, for the reference lint
+      - name: Reference lint on the pull request's text and commit messages
+        if: github.event_name == 'pull_request'
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          printf '%s\n%s\n' "$TITLE" "$BODY" > pull_request.txt
+          git log --format=%B "$BASE..$HEAD" > commits.txt
+          python3 scripts/lint_refs.py pull_request.txt commits.txt
       - run: |  # wheels only, so installing runs no package code
           python3 -m venv .venv
           .venv/bin/pip install -q --require-hashes --only-binary :all: -r requirements.txt
@@ -50,6 +62,8 @@ jobs:
           .venv/bin/python evals/safety/EVAL_test.py
           .venv/bin/python tests/test_registry.py
           .venv/bin/python tests/test_quiet_failure.py
+          .venv/bin/python tests/test_gate.py
+          .venv/bin/python tests/test_known_bad.py
       - name: Migrations and check_roles.sql
         run: .venv/bin/python tests/setup_test_db.py
       - name: Queue functions (dead letters, temp-table hijack, repeats)
