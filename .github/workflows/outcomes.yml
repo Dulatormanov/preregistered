@@ -1,0 +1,62 @@
+name: outcomes
+
+# Once a day: save the label events on every issue seen in the last 29 days (outcomes/collect.py), and open
+# one alert issue if a label appears that rules/ground_truth.toml neither maps nor ignores.
+on:
+  schedule:
+    - cron: "13 6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: outcomes
+  cancel-in-progress: false
+  queue: max
+
+permissions: {}
+
+jobs:
+  collect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read  # checkout only: no GitHub write rights
+    outputs:
+      unknown: ${{ steps.collect.outputs.unknown }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - run: |  # wheels only, so installing runs no package code
+          python3 -m venv .venv
+          .venv/bin/pip install -q --require-hashes --only-binary :all: -r requirements.txt
+      - id: collect
+        run: .venv/bin/python -m outcomes.collect
+        env:
+          COLLECTOR_DB_URL: ${{ secrets.COLLECTOR_DB_URL }}  # the collector role: record_outcome only
+          PREREG_READ_TOKEN: ${{ secrets.PREREG_READ_TOKEN }}
+
+  alert:
+    needs: collect
+    if: needs.collect.outputs.unknown != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write  # opens one alert issue in this repo
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Open one alert issue for unknown labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          UNKNOWN: ${{ needs.collect.outputs.unknown }}
+        run: |
+          title="Unknown Supabase label in outcomes"
+          printf '%s\n' "New label(s) that rules/ground_truth.toml neither maps nor ignores: $UNKNOWN." \
+            "Add each one to [areas] or [ignore] by pull request." > body.txt
+          python3 scripts/lint_refs.py body.txt  # every posted text passes the reference lint
+          if [ -z "$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number')" ]; then
+            gh issue create --title "$title" --body-file body.txt
+          fi

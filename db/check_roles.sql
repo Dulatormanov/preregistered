@@ -3,15 +3,16 @@
 -- Relations are found by number, not by name: postgres may not look up names inside prereg.
 with t as (select oid, relname from pg_class where relnamespace = 'prereg'::regnamespace and relkind = 'r'),
      rel as (select oid from pg_class where relnamespace = 'prereg'::regnamespace and relkind in ('r', 'p', 'v', 'm', 'f')),
-     job as (select oid, rolname from pg_roles where rolname in ('triage_agent', 'notary', 'observer')),
+     job as (select oid, rolname from pg_roles where rolname in ('triage_agent', 'notary', 'observer', 'collector')),
      r as (select oid, rolname from pg_roles
-           where rolname in ('postgres', 'triage_agent', 'notary', 'observer', 'anon', 'authenticated', 'service_role')),
+           where rolname in ('postgres', 'triage_agent', 'notary', 'observer', 'collector', 'anon', 'authenticated',
+                             'service_role')),
      adders as (select t.relname, array_agg(distinct r.rolname::text order by r.rolname::text) as roles
                 from t join pg_attribute a on a.attrelid = t.oid and a.attnum > 0 and not a.attisdropped, r
                 where has_column_privilege(r.oid, t.oid, a.attnum, 'INSERT') group by t.relname)
 select check_name, ok from (values
   ('1. postgres does not get the rights of prereg_owner or of a job role by default',
-   not exists (select from pg_roles x where x.rolname in ('prereg_owner', 'triage_agent', 'notary', 'observer')
+   not exists (select from pg_roles x where x.rolname in ('prereg_owner', 'triage_agent', 'notary', 'observer', 'collector')
                and pg_has_role('postgres', x.oid, 'USAGE'))),
   ('2. postgres can still SET ROLE prereg_owner on purpose',
    pg_has_role('postgres', 'prereg_owner', 'SET')),
@@ -34,7 +35,7 @@ select check_name, ok from (values
   ('8. each job role: NOINHERIT, at most 2 connections, 30-second statement and idle timeouts, no override',
    (select count(*) from pg_roles x join job using (oid)
     where not x.rolinherit and x.rolconnlimit = 2
-      and x.rolconfig @> array['statement_timeout=30s', 'idle_in_transaction_session_timeout=30s']) = 3
+      and x.rolconfig @> array['statement_timeout=30s', 'idle_in_transaction_session_timeout=30s']) = (select count(*) from job)
    and not exists (select from pg_db_role_setting s join job on s.setrole = job.oid where s.setdatabase <> 0)),
   ('9. no job role is a member of any role, so none can SET ROLE to borrow rights',
    not exists (select from pg_auth_members m join job on m.member = job.oid)),
@@ -42,12 +43,15 @@ select check_name, ok from (values
    not exists (select from pg_proc f where f.pronamespace = 'prereg'::regnamespace
                and not (f.prosecdef and coalesce(f.proconfig @> array['search_path=pg_catalog, pg_temp'], false)))),
   ('11. each job may call only its own functions',
-   coalesce((select array_agg(f.proname::text || ':' || r.rolname::text order by f.proname::text, r.rolname::text)
+   coalesce((select array_agg(e order by e) from (select f.proname::text || ':' || r.rolname::text as e
              from pg_proc f, r where f.pronamespace = 'prereg'::regnamespace
-             and has_function_privilege(r.oid, f.oid, 'EXECUTE')), '{}')
-   = (case when not exists (select from pg_proc f where f.pronamespace = 'prereg'::regnamespace) then '{}'::text[] else array[
+             and has_function_privilege(r.oid, f.oid, 'EXECUTE')) x), '{}')
+   = coalesce((select array_agg(e order by e) from unnest(array[
         'claim_next:triage_agent', 'complete:triage_agent', 'enqueue_issue:triage_agent', 'log_event:triage_agent',
-        'recent_provider_failures:triage_agent', 'record_anchor:notary', 'record_failure:triage_agent'] end)),
+        'recent_provider_failures:triage_agent', 'record_anchor:notary', 'record_failure:triage_agent',
+        'record_outcome:collector']) e  -- only the functions that exist yet, so this holds after each migration
+      where exists (select from pg_proc f where f.pronamespace = 'prereg'::regnamespace
+                    and f.proname = split_part(e, ':', 1))), '{}')),
   ('12. no job or API role can touch the queue tables directly',
    not exists (select from pg_class q, r where q.relnamespace = to_regnamespace('pgmq') and r.rolname <> 'postgres'
                and has_table_privilege(r.oid, q.oid, 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, TRIGGER')))

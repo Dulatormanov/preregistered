@@ -1,0 +1,34 @@
+# rules/ground_truth.toml: what counts as the truth for a guess. PREREGISTRATION.md v1 fixes these values.
+# A label counts if it maps to an area below, was added within window_days of the issue's creation,
+# and was added by a human who is not the issue's author. The switches change one rule at a time for
+# the sensitivity table; the defaults are the pre-registered rule.
+version = 1
+
+window_days = 14            # switches: 7, 14, 28
+template_labels = "out"     # labels added by the issue's author at creation (issue forms); switch: "in"
+agent_labels = "out"        # labels added by bots or agents; switch: "in"
+pool_rare = true            # areas not listed below count as "other"; switch: false (they are dropped)
+needs_details_label = "awaiting-details"
+
+[areas]  # Supabase label -> area of taxonomy.toml
+frontend = ["studio", "frontend", "website", "supabase.com", "design", "a11y", "ui library"]
+auth = ["auth", "auth-helpers"]
+postgres = ["database", "postgres", "extensions", "migrations", "supavisor", "replication", "vector", "wrappers"]
+self-hosted = ["self-hosted", "affects_self_hosted", "coolify"]
+documentation = ["documentation", "docs-search", "kb"]
+other = ["storage", "realtime", "edge functions", "cli", "data apis", "postgREST", "GraphQL", "branching",
+         "billing", "platform", "infra", "networking", "ai", "mcp", "etl", "analytics", "observability",
+         "integrations", "sdk", "supabase-js", "supabase-py", "supabase-flutter", "supabase-swift",
+         "supabase-react", "react-js", "redwood-js", "javascript", "python", "swift", "webhook/pg_net",
+         "api-gw", "admin-mgr", "multigres", "supabase-admin-agent", "supabase-admin-api", "i18n", "v0"]
+
+[ignore]  # labels that say nothing about the area; any label in neither list is "unknown" and raises an alert
+labels = ["ai-generated", "api-deploy-required", "autofix", "awaiting-details", "beta",
+          "breaking-change", "bug", "bug-fix", "cannot-reproduce", "clippy", "compliance", "dependencies",
+          "deprecation", "dev workflows", "devrel", "dnc", "do-not-merge", "duplicate", "enhancement", "example",
+          "external-issue", "flagged", "general availability", "github_actions", "good first issue",
+          "hacktoberfest", "hacktoberfest-accepted", "help wanted", "improvement", "incident", "internal-fix",
+          "internal-issue", "invalid", "needs-analysis", "new-feature", "office-hour", "p1", "p2", "p3", "p4",
+          "persist-in-search", "planned", "policy", "pr-opened", "preview-scorers", "private alpha",
+          "public alpha", "public beta", "question", "run-e2e", "run-evals", "salt", "security",
+          "skip-anchor-check", "skip-e2e", "to-triage", "triaged/l1", "WIP", "wontfix"]

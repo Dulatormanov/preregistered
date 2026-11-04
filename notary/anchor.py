@@ -17,6 +17,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from notary.canonical import FIELDS, FILE_PATH, GENESIS, anchor_text, chain, file_text
+from scripts.lint_refs import check as lint_refs
 
 LEDGER_START = datetime(2026, 11, 3, tzinfo=timezone.utc)  # the same day as START in runner/poll.py
 
@@ -45,6 +46,8 @@ def record(db, text, head, comment):
 
 
 def post(db, prev, text):
+    if lint_refs(text):  # every posted text passes the reference lint first
+        raise SystemExit("anchor text failed the reference lint")
     head = chain(prev, text)
     record(db, text, head, comments("POST", body={"body": f"{text} chain={head}"}))  # a lost record heals next run
     return head

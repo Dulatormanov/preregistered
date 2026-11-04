@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
 from setup_test_db import admin_url  # noqa: E402
 
-ROLES = ("triage_agent", "notary", "observer", "anon", "authenticated", "service_role", "postgres")
+ROLES = ("triage_agent", "notary", "observer", "collector", "anon", "authenticated", "service_role", "postgres")
 TABLE_RIGHTS = ("SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER")
 
 

@@ -30,6 +30,7 @@ jobs:
       TRIAGE_DB_URL: postgresql://triage_agent:test-only@localhost:5432/postgres
       NOTARY_DB_URL: postgresql://notary:test-only@localhost:5432/postgres
       OBSERVER_DB_URL: postgresql://observer:test-only@localhost:5432/postgres
+      COLLECTOR_DB_URL: postgresql://collector:test-only@localhost:5432/postgres
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -41,6 +42,7 @@ jobs:
         run: |
           .venv/bin/python tests/test_canonical.py
           .venv/bin/python tests/test_champion.py
+          .venv/bin/python tests/test_lint_refs.py
       - name: Migrations and check_roles.sql
         run: .venv/bin/python tests/setup_test_db.py
       - name: Queue functions (dead letters, temp-table hijack, repeats)

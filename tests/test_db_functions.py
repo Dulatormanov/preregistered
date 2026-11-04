@@ -120,6 +120,17 @@ def test_the_sweep_marks_an_attempt_that_never_finished():
                 str(attempt))[0][0] == 1
 
 
+def test_an_outcome_is_saved_once_and_only_through_record_outcome():
+    with job("collector") as k, job() as t:
+        add = "select prereg.record_outcome(9001, %s, 'studio', 'add', 'User', false, now())"
+        assert k.execute(add, ["event-1"]).fetchone()[0] is True
+        assert k.execute(add, ["event-1"]).fetchone()[0] is None  # the same GitHub event again: not saved twice
+        assert denied(k, "insert into prereg.outcomes (issue_number, event_key, label, action, actor, by_author,"
+                         " labeled_at) values (9001, 'x', 'x', 'add', 'User', false, now())")
+        assert denied(t, add, "event-2")
+    assert look("select count(*) from prereg.outcomes where issue_number = 9001")[0][0] == 1
+
+
 def test_each_job_calls_only_its_own_functions():
     with job("notary") as n, job("observer") as o, job() as t:
         assert denied(n, "select * from prereg.claim_next(1, 'x')")

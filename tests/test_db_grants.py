@@ -20,6 +20,7 @@ COLUMNS = {  # from the migrations in db/; check_roles.sql reads the live catalo
               "output_tokens", "cache_read_tokens", "cache_write_tokens", "cost_usd", "lock_sha256", "error",
               "created_at"],
     "runs": ["msg_id", "issue_number", "champion_id", "read_ct", "run_id", "created_at"],  # db/004_functions.sql
+    "outcomes": ["issue_number", "event_key", "label", "action", "actor", "by_author", "labeled_at", "created_at"],
 }
 TIMED_INSERT = {  # an insert that also sets the row's time: no job may do it
     "issues_seen": "(issue_number, gh_created_at, content_sha256, labels_at_seen, first_seen_at)"
@@ -30,6 +31,8 @@ TIMED_INSERT = {  # an insert that also sets the row's time: no job may do it
     "run_events": "(kind, data, created_at) select 'x', '{}', now()",
     "steps": "(job, champion_id, model, status, lock_sha256, created_at) select 'x', 'x', 'x', 'ok', 'x', now()",
     "runs": "(msg_id, issue_number, champion_id, read_ct, created_at) select 1, 1, 'x', 1, now()",
+    "outcomes": "(issue_number, event_key, label, action, actor, by_author, labeled_at, created_at)"
+                " select 1, 'x', 'x', 'add', 'User', false, now(), now()",
 }
 PLAIN_INSERT = {  # an insert with only the columns that some job may fill
     "issues_seen": "(issue_number, gh_created_at, content_sha256, labels_at_seen) select 1, now(), 'x', '{}'",
@@ -38,10 +41,13 @@ PLAIN_INSERT = {  # an insert with only the columns that some job may fill
     "run_events": "(kind, data) select 'x', '{}'",
     "steps": "(job, champion_id, model, status, lock_sha256) select 'x', 'x', 'x', 'ok', 'x'",
     "runs": "(msg_id, issue_number, champion_id, read_ct) select 1, 1, 'x', 1",  # only functions add runs
+    "outcomes": "(issue_number, event_key, label, action, actor, by_author, labeled_at)"
+                " select 1, 'x', 'x', 'add', 'User', false, now()",  # only record_outcome adds outcomes
 }
 MAY_ADD = {"triage_agent": {"issues_seen", "predictions", "run_events", "steps"}, "notary": {"anchors"},
-           "observer": set()}
-ROLES = (("triage_agent", "TRIAGE_DB_URL"), ("notary", "NOTARY_DB_URL"), ("observer", "OBSERVER_DB_URL"))
+           "observer": set(), "collector": set()}
+ROLES = (("triage_agent", "TRIAGE_DB_URL"), ("notary", "NOTARY_DB_URL"), ("observer", "OBSERVER_DB_URL"),
+         ("collector", "COLLECTOR_DB_URL"))
 
 
 def attempts(role):

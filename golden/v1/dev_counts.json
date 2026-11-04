@@ -1,0 +1,14 @@
+{
+ "issues": 537,
+ "scorable": 186,
+ "areas": {
+  "frontend": 103,
+  "auth": 10,
+  "postgres": 12,
+  "self-hosted": 13,
+  "documentation": 16,
+  "other": 32
+ },
+ "needs_details": 82,
+ "rules_version": 1
+}
