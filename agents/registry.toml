@@ -12,6 +12,7 @@
 #
 # Slots: a run is due at every minute m where (m - Monday 2026-11-02 00:00 UTC) % cadence_min == at_minute.
 # evidence: event:<kind> is a prereg.run_events row; run:<file> is a successful scheduled run of that workflow.
+# first_slot: slots before it do not count, because the job did not exist yet.
 
 model_keys = ["ANTHROPIC_API_KEY"]
 write_secrets = ["PREREG_SANDBOX_WRITE"]
@@ -48,6 +49,7 @@ cadence_min = 15
 at_minute = 7
 grace_min = 45
 evidence = "event:polled"
+first_slot = "2026-11-04T18:07:00+00:00"  # the first slot this job could fill
 
 [[job]]
 id = "tick/anchor"  # runs after a poll that saved guesses; the watchdog alerts on any guess unanchored for 30 minutes
@@ -70,6 +72,7 @@ cadence_min = 1440
 at_minute = 373  # 06:13 UTC
 grace_min = 180
 evidence = "run:outcomes.yml"
+first_slot = "2026-11-05T06:13:00+00:00"  # the first slot this job could fill
 
 [[job]]
 id = "outcomes/alert"
@@ -92,6 +95,7 @@ cadence_min = 10080
 at_minute = 443  # Monday 07:23 UTC
 grace_min = 240
 evidence = "run:weekly.yml"
+first_slot = "2026-11-09T07:23:00+00:00"  # the first slot this job could fill
 
 [[job]]
 id = "weekly/post"
@@ -160,6 +164,7 @@ cadence_min = 10
 at_minute = 0
 grace_min = 15
 evidence = "event:sweep_ran"
+first_slot = "2026-11-04T22:10:00+00:00"  # the first slot this job could fill
 
 [[job]]
 id = "watchdog/check"  # its own runs are watched by the Healthchecks check "watchdog" (period 30, grace 30)
