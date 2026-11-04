@@ -51,6 +51,8 @@ jobs:
       - run: |  # wheels only, so installing runs no package code
           python3 -m venv .venv
           .venv/bin/pip install -q --require-hashes --only-binary :all: -r requirements.txt
+      - name: Every workflow file is valid YAML (Ruby's own parser, already on the runner)
+        run: ruby -ryaml -e 'ARGV.each { |f| YAML.load_file(f) }' .github/workflows/*.yml
       - name: Unit tests
         run: |
           .venv/bin/python tests/test_canonical.py

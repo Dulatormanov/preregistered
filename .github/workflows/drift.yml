@@ -46,5 +46,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           ALERT_SOURCE: drift check
-          ALERTS: ${{ needs.check.outputs.alerts || '{"did_not_run": "the drift check did not finish"}' }}
+          ALERTS: ${{ needs.check.outputs.alerts }}  # empty if the check did not finish: then one did_not_run alert
         run: python3 -m ops.open_alerts
