@@ -1,7 +1,9 @@
 name: tick
 
 on:
-  schedule:  # one line per slot, so github.event.schedule tells a late run from the next slot
+  # One line per slot, so github.event.schedule tells a late run from the next slot.
+  # GitHub registers these when this file changes on main, not when the workflow is enabled.
+  schedule:
     - cron: "7 * * * *"
     - cron: "22 * * * *"
     - cron: "37 * * * *"
