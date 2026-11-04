@@ -17,9 +17,12 @@ The sandbox write token, `prereg-sandbox-write`, exists in one place only: the G
 
 A run that needs the write token is always started by `dispatch.yml`, so its triggering actor is the bot. That is why the owner can approve it (Check 13).
 
+- **Where the token is saved.** Only as an environment secret: `gh secret set PREREG_SANDBOX_WRITE --env sandbox-write`. Saved without `--env`, it would be a repository secret, which any run on any branch can read with no approval. The probe checks this on every run: its first job runs outside the environment, and it fails if the token reaches it.
+- **What the gate does not stop.** Anyone who holds the owner's own GitHub login can approve, and that includes the `gh` CLI token on the owner's laptop. No job and no secret in this repo can approve. So the CLI token never goes into a job, and a coding agent on the laptop must never approve. That last part is a rule, not a structure.
+
 ## Live probes on the sandbox's probe issue
 
-`probes/probe.py`, run by `probe.yml` and started through `dispatch.yml`. Each row is one real request, with GitHub's request id.
+`probes/probe.py`, run by `probe.yml` and started through `dispatch.yml`. Each row is one real request, with GitHub's request id. DENIED means GitHub's own refusal (HTTP 403, "Resource not accessible"). Any other failure, such as a dead token (401), a rate limit or a GitHub error, is ERROR and fails the run, so it can never pass for a denial.
 
 | Token | Action | Result | HTTP | Request id |
 |---|---|---|---|---|
