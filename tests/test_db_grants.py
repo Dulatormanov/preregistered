@@ -2,7 +2,7 @@
 
 Run it after db/003_roles.sql (it needs the notary and observer roles). Until the Day 3 test database
 exists, run it on your Mac against prereg-prod:
-  TRIAGE_DB_URL=... NOTARY_DB_URL=... OBSERVER_DB_URL=... python tests/test_db_grants.py
+  TRIAGE_DB_URL=... NOTARY_DB_URL=... OBSERVER_DB_URL=... COLLECTOR_DB_URL=... GATE_DB_URL=... python tests/test_db_grants.py
 Every attempt touches zero rows (WHERE false, or an empty table for TRUNCATE inside a rollback), so even
 an attempt that is wrongly allowed changes nothing and uses no id. Each also runs in its own transaction,
 which always rolls back. check_roles.sql covers what this test does not, from the catalog.
@@ -44,9 +44,9 @@ PLAIN_INSERT = {  # an insert with only the columns that some job may fill
     "outcomes": "(issue_number, event_key, label, action, actor, by_author, labeled_at)"
                 " select 1, 'x', 'x', 'add', 'User', false, now()",  # only record_outcome adds outcomes
 }
-MAY_ADD = {"triage_agent": set(), "notary": set(), "observer": set(), "collector": set()}  # functions only
+MAY_ADD = {"triage_agent": set(), "notary": set(), "observer": set(), "collector": set(), "gate_runner": set()}
 ROLES = (("triage_agent", "TRIAGE_DB_URL"), ("notary", "NOTARY_DB_URL"), ("observer", "OBSERVER_DB_URL"),
-         ("collector", "COLLECTOR_DB_URL"))
+         ("collector", "COLLECTOR_DB_URL"), ("gate_runner", "GATE_DB_URL"))  # every write is a function call
 
 
 def attempts(role):

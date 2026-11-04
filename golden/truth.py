@@ -3,7 +3,8 @@
 The area is the area of the first counting label: a label that maps to an area, added within window_days of
 the issue's creation, by a human who is not the issue's author (by default). needs_details is true if the
 awaiting-details label was added the same way. An issue with no counting area label is not scorable.
-Run python golden/truth.py to check it: dev-set counts are printed, and the sealed set prints only
+Run python golden/truth.py to check it: dev-set counts are printed (and golden/v1/dev_truth.csv is written, the
+triage suite's samples), and the sealed set prints only
 "enough" or "not enough" per area (Check 12), so nobody sees its labels before it is scored once.
 """
 import json
@@ -49,6 +50,10 @@ def main():
               "areas": {a: sum(t == a for t, _ in dev_truth) for a in areas},
               "needs_details": sum(nd for _, nd in dev_truth), "rules_version": RULES["version"]}
     (ROOT / "golden/v1/dev_counts.json").write_text(json.dumps(counts, indent=1) + "\n")
+    # The triage suite's samples: the scorable dev issues, with no label times (they show how fast maintainers work).
+    (ROOT / "golden/v1/dev_truth.csv").write_text("issue_number,content_sha256,area,needs_details\n" + "".join(
+        f"{r['number']},{r['content_sha256']},{a},{str(nd).lower()}\n"
+        for r, (a, nd) in sorted(zip(dev, dev_truth), key=lambda x: x[0]["number"]) if a is not None))
     print("dev set:", json.dumps(counts))
     sealed_areas = [truth(r)[0] for r in sealed]
     print("Check 12 (sealed set, labels not final until 2026-11-14):",

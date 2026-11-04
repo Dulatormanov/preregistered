@@ -5,16 +5,16 @@
 with t as (select oid, relname from pg_class where relnamespace = 'prereg'::regnamespace and relkind = 'r'),
      rel as (select oid, relname from pg_class where relnamespace = 'prereg'::regnamespace
              and relkind in ('r', 'p', 'v', 'm', 'f')),  -- tables, views and the rest: a view can be written
-     job as (select oid, rolname from pg_roles where rolname in ('triage_agent', 'notary', 'observer', 'collector')),
+     job as (select oid, rolname from pg_roles where rolname in ('triage_agent', 'notary', 'observer', 'collector', 'gate_runner')),
      r as (select oid, rolname from pg_roles
-           where rolname in ('postgres', 'triage_agent', 'notary', 'observer', 'collector', 'anon', 'authenticated',
+           where rolname in ('postgres', 'triage_agent', 'notary', 'observer', 'collector', 'gate_runner', 'anon', 'authenticated',
                              'service_role')),
      adders as (select rel.relname, array_agg(distinct r.rolname::text order by r.rolname::text) as roles
                 from rel join pg_attribute a on a.attrelid = rel.oid and a.attnum > 0 and not a.attisdropped, r
                 where has_column_privilege(r.oid, rel.oid, a.attnum, 'INSERT') group by rel.relname)
 select check_name, ok from (values
   ('1. postgres does not get the rights of prereg_owner or of a job role by default',
-   not exists (select from pg_roles x where x.rolname in ('prereg_owner', 'triage_agent', 'notary', 'observer', 'collector')
+   not exists (select from pg_roles x where x.rolname in ('prereg_owner', 'triage_agent', 'notary', 'observer', 'collector', 'gate_runner')
                and pg_has_role('postgres', x.oid, 'USAGE'))),
   ('2. postgres can still SET ROLE prereg_owner on purpose',
    pg_has_role('postgres', 'prereg_owner', 'SET')),
@@ -52,9 +52,11 @@ select check_name, ok from (values
              and has_function_privilege(r.oid, f.oid, 'EXECUTE')) x), '{}')
    = coalesce((select array_agg(e order by e) from unnest(array[
         'claim_next:triage_agent', 'complete:triage_agent', 'enqueue_issue:triage_agent', 'log_event:triage_agent',
-        'losses_since:triage_agent', 'newest_first_sight:triage_agent', 'recent_provider_failures:triage_agent', 'record_anchor:notary',
-        'record_failure:triage_agent', 'record_outcome:collector', 'record_probe:triage_agent',
-        'spend_today:triage_agent', 'unanchored_guesses:triage_agent']) e  -- only the functions that exist yet
+        'losses_since:triage_agent', 'newest_first_sight:triage_agent', 'queue_health:observer',
+        'recent_provider_failures:triage_agent', 'record_anchor:notary', 'record_failure:triage_agent',
+        'record_gate_step:gate_runner', 'record_outcome:collector', 'record_probe:triage_agent',
+        'spend_today:gate_runner', 'spend_today:triage_agent', 'spend_total:gate_runner', 'sweep_abandoned:postgres',
+        'unanchored_guesses:triage_agent']) e  -- only the functions that exist yet
       where exists (select from pg_proc f where f.pronamespace = 'prereg'::regnamespace
                     and f.proname = split_part(e, ':', 1))), '{}')),
   ('12. no job or API role can touch the queues directly, by table, column or schema',

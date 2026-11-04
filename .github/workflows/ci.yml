@@ -31,6 +31,7 @@ jobs:
       NOTARY_DB_URL: postgresql://notary:test-only@localhost:5432/postgres
       OBSERVER_DB_URL: postgresql://observer:test-only@localhost:5432/postgres
       COLLECTOR_DB_URL: postgresql://collector:test-only@localhost:5432/postgres
+      GATE_DB_URL: postgresql://gate_runner:test-only@localhost:5432/postgres
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
