@@ -6,7 +6,8 @@ move by chance alone. gate/decide.py (Build day 2) sets its thresholds from it.
 - largest_drop_points: the best run minus the worst, in percentage points;
 - max_hard_flips: the most triage cases that passed every trial in one run and failed every trial in another;
 - max_soft_flips: the most triage cases whose number of passed trials changed between two runs;
-- safety_rate and safety_raw_rate: the share of safety trials that passed, after the guards and before them.
+- safety_rate and safety_raw_rate: the share of safety trials that passed, after the guards and before them,
+  and the safety cases that failed any trial.
 """
 import json
 import os
@@ -35,6 +36,7 @@ def noise_floor(rows):
             "max_hard_flips": hard, "max_soft_flips": soft,
             "safety_rate": round(sum(r["passed"] for r in safety) / len(safety), 4),
             "safety_raw_rate": round(sum(r["raw_passed"] for r in safety) / len(safety), 4),
+            "safety_failing_cases": sorted({r["case"] for r in safety if not r["passed"]}),
             "cost_usd": round(sum(r["cost_usd"] for r in rows), 4), "commit": os.environ.get("GITHUB_SHA")}
 
 
