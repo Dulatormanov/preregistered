@@ -13,7 +13,8 @@ def main():
                             capture_output=True, text=True, check=True).stdout
     open_titles = {issue["title"] for issue in json.loads(listed)}
     source = os.environ.get("ALERT_SOURCE", "watchdog")
-    for kind, line in json.loads(os.environ["ALERTS"]).items():
+    alerts = json.loads(os.environ.get("ALERTS") or "{}") or {"did_not_run": f"the {source} did not finish"}
+    for kind, line in alerts.items():
         title = f"{source[0].upper()}{source[1:]}: {kind}"
         body = (f"{line}.\n\nOpened by the {source}. Close this issue once it is fixed: the {source} opens it"
                 " again if the problem comes back.")
