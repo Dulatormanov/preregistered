@@ -238,3 +238,27 @@ autonomy = "read_report"
 suite = "ci"
 secrets = []
 permissions = ["contents: read", "issues: write"]
+
+[[job]]
+id = "sealed/score"  # the one sealed run, on or after 2026-11-16; every other day it does nothing
+owner = "Dulatormanov"
+tier = "ledger"
+autonomy = "read_report"
+suite = "triage"
+secrets = ["ADOPTER_DB_URL", "ANTHROPIC_API_KEY", "PREREG_READ_TOKEN"]
+permissions = ["contents: read"]
+environment = "adopt"
+cadence_min = 1440
+at_minute = 467  # 07:47 UTC
+grace_min = 240
+evidence = "run:sealed.yml"
+first_slot = "2026-11-06T07:47:00+00:00"  # the first slot this job could fill
+
+[[job]]
+id = "sealed/open-pr"
+owner = "Dulatormanov"
+tier = "public_write"
+autonomy = "read_report"
+suite = "ci"
+secrets = []
+permissions = ["contents: write", "pull-requests: write"]
