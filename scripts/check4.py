@@ -28,7 +28,7 @@ with urllib.request.urlopen(req, timeout=30) as r:
 assert len(issues) == 20, len(issues)
 
 cfg, client, steps = champion.load(), anthropic.Anthropic(max_retries=2, timeout=60), []
-with psycopg.connect(os.environ["TRIAGE_DB_URL"]) as db:
+with psycopg.connect(os.environ["TRIAGE_DB_URL"], autocommit=True) as db:  # no idle transaction
     for it in issues:
         *_, step = champion.guess(cfg, client, it["title"], it["body"])
         db.execute(f"insert into prereg.steps ({', '.join(STEP)}) values ({', '.join(['%s'] * len(STEP))})",

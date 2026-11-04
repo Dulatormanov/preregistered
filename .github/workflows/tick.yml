@@ -71,7 +71,7 @@ jobs:
           .venv/bin/pip install -q --require-hashes --only-binary :all: -r requirements.txt
       - run: .venv/bin/python -m notary.anchor
         env:
-          TRIAGE_DB_URL: ${{ secrets.TRIAGE_DB_URL }}
+          NOTARY_DB_URL: ${{ secrets.NOTARY_DB_URL }}  # the notary role: adds anchors, nothing else
           GH_TOKEN: ${{ github.token }}
           NOTARY_ISSUE: ${{ vars.NOTARY_ISSUE }}
           ANCHOR_FILE: ${{ inputs.file }}

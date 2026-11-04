@@ -1,6 +1,8 @@
 """One tick: read new upstream issues, save the baseline and the champion guesses, log a 'polled' event.
 
 Prints counts only, never issue numbers or text: Actions logs are public.
+The connection is in autocommit mode, so no transaction is ever open during a network call (the role's
+idle-in-transaction timeout is 30 seconds). Writes that belong together share one short transaction.
 """
 import json
 import os
@@ -47,15 +49,16 @@ def github(url, token):
         "Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "preregistered"})
     with urllib.request.urlopen(req, timeout=30) as r:
-        return r.status, json.load(r)
+        return r.status, json.load(r), r.headers
 
 
 def new_issues(token, cutoff, event):
     """Issues (not PRs) created at or after cutoff, newest first."""
     out = []
     for page in range(1, MAX_PAGES + 1):
-        event["http_status"], batch = github(
+        event["http_status"], batch, headers = github(
             f"{UPSTREAM}?state=all&sort=created&direction=desc&per_page={PER_PAGE}&page={page}", token)
+        event.setdefault("token_expires", headers.get("github-authentication-token-expiration"))  # Check 9
         for it in batch:
             if "pull_request" in it:
                 continue
@@ -102,7 +105,7 @@ def champion_pass(db, token, listed):
         it, step = listed.get(number), None
         if it is None:  # the ledger keeps no issue text, so a retry reads the issue again
             try:  # note: urllib follows a 301 (a moved issue); the Day 3 queue treats it as gone instead
-                _, it = github(f"{UPSTREAM}/{number}", token)
+                _, it, _ = github(f"{UPSTREAM}/{number}", token)
             except urllib.error.HTTPError as e:
                 if e.code not in (404, 410):
                     n["unreachable"] += 1  # GitHub trouble: try again next tick
@@ -117,13 +120,13 @@ def champion_pass(db, token, listed):
         if step is None:
             calls += 1
             area, needs_details, h, step = champion.guess(cfg, client, it["title"], it["body"])
-        db.execute(f"insert into prereg.steps ({', '.join(STEP)}) values ({', '.join(['%s'] * len(STEP))})",
-                   ["tick", number] + [step[k] for k in STEP[2:]])
-        if area is not None:
-            db.execute(
-                "insert into prereg.predictions (issue_number, champion_id, area, needs_details, input_sha256)"
-                " values (%s, %s, %s, %s, %s)", [number, cfg["c"]["id"], area, needs_details, h])
-        db.commit()  # each guess is saved with its step before the next call
+        with db.transaction():  # a guess and its step are saved together, before the next call
+            db.execute(f"insert into prereg.steps ({', '.join(STEP)}) values ({', '.join(['%s'] * len(STEP))})",
+                       ["tick", number] + [step[k] for k in STEP[2:]])
+            if area is not None:
+                db.execute(
+                    "insert into prereg.predictions (issue_number, champion_id, area, needs_details, input_sha256)"
+                    " values (%s, %s, %s, %s, %s)", [number, cfg["c"]["id"], area, needs_details, h])
         n[COUNT[step["status"]]] += 1
         n["cost_usd"] = round(n["cost_usd"] + float(step["cost_usd"]), 6)
     return n
@@ -134,7 +137,7 @@ def main():
     event = {"trigger": os.environ.get("GITHUB_EVENT_NAME"), "run_id": os.environ.get("GITHUB_RUN_ID"),
              "planned_start": planned_slot(started).isoformat(), "actual_start": started.isoformat()}
     token = os.environ["PREREG_READ_TOKEN"]
-    with psycopg.connect(os.environ["TRIAGE_DB_URL"]) as db:
+    with psycopg.connect(os.environ["TRIAGE_DB_URL"], autocommit=True) as db:
         newest = db.execute("select max(gh_created_at) from prereg.issues_seen").fetchone()[0]
         cutoff = max(START, newest - OVERLAP) if newest else START
         try:
@@ -142,28 +145,28 @@ def main():
         except Exception as e:  # record the failure, then fail the job loudly
             event.update(http_status=getattr(e, "code", None), error=type(e).__name__)
             db.execute("insert into prereg.run_events (kind, data) values ('polled', %s)", [Jsonb(event)])
-            db.commit()
             raise
         saved = 0
-        for it in issues:
-            h = content_sha256(it["title"], it["body"])
-            first_sight = db.execute(
-                "insert into prereg.issues_seen (issue_number, gh_created_at, content_sha256, labels_at_seen)"
-                " values (%s, %s, %s, %s) on conflict do nothing returning issue_number",
-                [it["number"], utc(it["created_at"]), h, [l["name"] for l in it["labels"]]]).fetchone()
-            if first_sight:
-                area, needs_details = rules_v0.guess(it["title"], it["body"])
-                db.execute(
-                    "insert into prereg.predictions (issue_number, champion_id, area, needs_details, input_sha256)"
-                    " values (%s, %s, %s, %s, %s)",
-                    [it["number"], rules_v0.CHAMPION_ID, area, needs_details, h])
-                saved += 1
-        db.commit()  # first sight and the baseline are saved before any model call
+        # All or nothing: the next cutoff comes from the newest first sight, so saving only the newest
+        # issues of a crashed tick would skip the older ones for good. The loop makes no network call.
+        with db.transaction():
+            for it in issues:
+                h = content_sha256(it["title"], it["body"])
+                first_sight = db.execute(
+                    "insert into prereg.issues_seen (issue_number, gh_created_at, content_sha256, labels_at_seen)"
+                    " values (%s, %s, %s, %s) on conflict do nothing returning issue_number",
+                    [it["number"], utc(it["created_at"]), h, [l["name"] for l in it["labels"]]]).fetchone()
+                if first_sight:
+                    area, needs_details = rules_v0.guess(it["title"], it["body"])
+                    db.execute(
+                        "insert into prereg.predictions (issue_number, champion_id, area, needs_details, input_sha256)"
+                        " values (%s, %s, %s, %s, %s)",
+                        [it["number"], rules_v0.CHAMPION_ID, area, needs_details, h])
+                    saved += 1
         failure = None
         try:
             n = champion_pass(db, token, {it["number"]: it for it in issues})
         except BaseException as e:  # record the run and its outputs first, then fail loudly
-            db.rollback()
             n, failure = {"error": type(e).__name__}, e
         pending = db.execute(
             "select count(*) from prereg.predictions"

@@ -2,6 +2,15 @@
 
 Newest first. Each entry says what was decided and why.
 
+## 2026-11-05 (Day 2)
+
+- **One login per job.** `triage_agent` (the poll job) adds first sights, guesses, steps and run events. `notary` (the anchor job) adds anchors only. `observer` reads everything and adds nothing. So the poll job can no longer write an anchor record, and the anchor job can no longer write a guess.
+- **Job roles are NOINHERIT, with at most 2 connections and 30-second statement and idle timeouts.** NOINHERIT does not stop SET ROLE, so check 9 keeps every job role a member of no role. The timeouts are session defaults: they stop a buggy job, not a leaked login. Check 8 alerts if they change.
+- **Autocommit.** Neither job keeps a transaction open over the network. Writes that belong together share one short transaction. A tick's first sights are all or nothing, because the next cutoff comes from the newest one.
+- **Two layers of checks.** `db/check_roles.sql` reads the catalog: 9 checks, for every role and every kind of right (column UPDATE, TRIGGER, views, column SELECT). `tests/test_db_grants.py` tries 187 forbidden actions as each job role. Each attempt touches zero rows, so even one that is wrongly allowed changes nothing and uses no id. The Day 2 review found 6 gaps in the first version, and each one now turns a check red.
+- **`credentials.toml`** lists every secret, with what it can do, what it must never do, and when it expires.
+- **Check 9 result:** pending. The poll job saves GitHub's token-expiry header in each 'polled' event.
+
 ## 2026-11-04 (Day 1, started a day early)
 
 - **PREREGISTRATION.md v0 is anchored**: anchor 3 on the Notary log, at 16:31:59 UTC, pins it at commit 4567c8b. A second run 40 seconds later pinned the same file at the same commit again (anchor 4). The first time counts. Both comments recompute.

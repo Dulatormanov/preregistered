@@ -1,7 +1,8 @@
 """Post the chain hash of every guess not yet anchored, and of a file if asked, on the pinned Notary log.
 
 This job holds an issues:write token for this repo (GitHub has no comment-only
-permission), so it runs nothing but this file.
+permission), so it runs nothing but this file. It logs in as notary, which may add anchors and
+nothing else. The connection is in autocommit mode: no transaction is open during a network call.
 """
 import hashlib
 import json
@@ -45,13 +46,12 @@ def record(db, text, head, comment):
 
 def post(db, prev, text):
     head = chain(prev, text)
-    record(db, text, head, comments("POST", body={"body": f"{text} chain={head}"}))
-    db.commit()  # one record per comment: a crash loses at most the last one, and the next run heals it
+    record(db, text, head, comments("POST", body={"body": f"{text} chain={head}"}))  # a lost record heals next run
     return head
 
 
 def main():
-    with psycopg.connect(os.environ["TRIAGE_DB_URL"], row_factory=dict_row) as db:
+    with psycopg.connect(os.environ["NOTARY_DB_URL"], row_factory=dict_row, autocommit=True) as db:
         last = db.execute(
             "select chain_hash, comment_created_at from prereg.anchors order by id desc limit 1").fetchone()
         prev = last["chain_hash"] if last else GENESIS
@@ -66,7 +66,6 @@ def main():
                 record(db, text, head, c)
                 prev = head
                 healed += 1
-        db.commit()
         done = [f"healed={healed}"] if healed else []
         upto = db.execute("select coalesce(max(upto_prediction_id), 0) as n from prereg.anchors").fetchone()["n"]
         rows = db.execute(f"select {', '.join(FIELDS)} from prereg.predictions where id > %s order by id",
