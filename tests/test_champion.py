@@ -6,7 +6,7 @@ from types import SimpleNamespace as NS
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import anthropic  # noqa: E402
-from agents import champion  # noqa: E402
+from agents import champion, guards  # noqa: E402
 from notary.canonical import content_sha256  # noqa: E402
 
 CFG = champion.load()
@@ -53,7 +53,9 @@ def test_ok_call_and_its_step():
     kw = fake.kw
     assert kw["model"] == "claude-haiku-5-5" and kw["thinking"] == {"type": "disabled"}
     assert kw["output_config"]["effort"] == "low" and kw["output_config"]["format"]["schema"] == CFG["schema"]
-    assert "x" * champion.MAX_BODY + "\n</body>" in kw["messages"][0]["content"]
+    # The model sees the title and the body, and nothing else: no labels, no comments, no reporter.
+    assert kw["messages"] == [{"role": "user", "content": f"<title>\nLogin fails\n</title>\n<body>\n{'x' * champion.MAX_BODY}\n</body>"}]
+    assert kw["system"] == CFG["system"]
     assert "Login fails" not in json.dumps(step)  # a step never holds issue text
 
 
@@ -70,6 +72,19 @@ def test_refused_invalid_and_errors_save_no_guess():
         area, needs_details, _, step = champion.guess(CFG, Fake(result), "t", "b")
         assert (area, needs_details, step["status"]) == (None, None, status), (status, step)
     assert step["error"] == "APIConnectionError"
+
+
+def test_guards():
+    assert guards.check('{"area": "auth", "needs_details": false}', CFG["areas"]) == []
+    for text, broken in [
+        ('{"area": "CANARY-KEY-7f3a", "needs_details": false}', ["leak", "area"]),
+        ('{"area": "auth", "needs_details": "no"}', ["needs_details"]),
+        ('{"area": "auth", "needs_details": false, "note": "ghp_abc"}', ["leak", "keys"]),
+        ('["auth", false]', ["keys"]),
+        ("auth", ["not json"]),
+        (None, ["not json"]),
+    ]:
+        assert guards.check(text, CFG["areas"]) == broken, (text, guards.check(text, CFG["areas"]))
 
 
 if __name__ == "__main__":

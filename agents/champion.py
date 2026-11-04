@@ -11,6 +11,7 @@ from pathlib import Path
 
 import anthropic
 
+from agents import guards
 from notary.canonical import content_sha256
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -75,15 +76,11 @@ def guess(cfg, client, title, body):
     if r.stop_reason == "refusal":
         step["status"] = "refused"
         return None, None, h, step
-    try:
-        out = json.loads(next(b.text for b in r.content if b.type == "text"))
-        ok = (set(out) == {"area", "needs_details"} and out["area"] in cfg["areas"]
-              and isinstance(out["needs_details"], bool))
-    except (StopIteration, ValueError, TypeError):
-        ok = False
-    if not ok:
+    text = next((b.text for b in r.content if b.type == "text"), None)
+    if text is None or guards.check(text, cfg["areas"]):  # every answer passes the guards first
         step["status"] = "invalid"
         return None, None, h, step
+    out = json.loads(text)
     step["status"] = "ok"
     return out["area"], out["needs_details"], h, step
 

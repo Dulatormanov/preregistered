@@ -5,6 +5,7 @@ Every call is made as the job role that will make it from Day 5 on; the admin lo
 """
 import sys
 import time
+from decimal import Decimal
 from pathlib import Path
 
 import psycopg
@@ -247,6 +248,33 @@ def test_complete_refuses_a_null_outcome_and_a_failed_step():
                 pass
         assert complete(t, attempt, "guessed", "auth", False) == "done"
     assert look("select job from prereg.steps where issue_number = 9108") == [("tick",)]  # under the daily cap
+
+
+def test_the_sweeper_runs_as_postgres_every_10_minutes():
+    with psycopg.connect(admin_url(), autocommit=True) as a:  # pg_cron runs a job as the role that scheduled it
+        assert a.execute("select schedule, command, username from cron.job where jobname = 'prereg-sweeper'"
+                         ).fetchone() == ("*/10 * * * *", "select prereg.sweep_abandoned('15 minutes')", "postgres")
+        assert a.execute("select prereg.sweep_abandoned('15 minutes')").fetchone()[0] >= 0  # without SET ROLE
+    assert look("select count(*) from prereg.run_events where kind = 'sweep_ran'")[0][0] >= 1  # the slot rule's proof
+
+
+def test_the_gate_records_only_its_own_steps():
+    with job("gate_runner") as g, job() as t:
+        g.execute("select prereg.record_gate_step('gate', 45445, %s)", [Jsonb(dict(STEP, cost_usd=0.5))])
+        g.execute("select prereg.record_gate_step('check:claude-opus-5-5', null, %s)", [Jsonb(dict(STEP, cost_usd=2))])
+        for bad in ("tick", "check:", "gate' or 'x"):
+            try:
+                g.execute("select prereg.record_gate_step(%s, null, %s)", [bad, Jsonb(STEP)])
+                raise AssertionError(f"record_gate_step took job {bad!r}")
+            except psycopg.errors.InvalidParameterValue:
+                pass
+        assert g.execute("select prereg.spend_today('gate'), prereg.spend_total('check:claude-opus-5-5')"
+                         ).fetchone() == (Decimal("0.5"), Decimal("2"))
+        assert t.execute("select prereg.spend_today('tick')").fetchone()[0] < 1  # the gate never adds to the live cap
+        assert denied(g, "select * from prereg.claim_next(1, 'x')") and denied(t, "select prereg.spend_total('gate')")
+    dead = look("select count(*) from prereg.run_events where kind = 'dead_letter'")[0][0]
+    with job("observer") as o:  # the watchdog's view of the queues: every dead letter, and an empty queue
+        assert o.execute("select * from prereg.queue_health()").fetchone() == (dead, 0) and dead >= 2
 
 
 def test_each_job_calls_only_its_own_functions():
