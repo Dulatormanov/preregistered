@@ -6,8 +6,12 @@ It writes only through functions (db/004_functions.sql and db/006_revoke.sql), a
 - The model call never runs inside an open database transaction (the connection is in autocommit mode),
   and complete() runs only after the model answered.
 - A refusal or an invalid answer completes the message with no guess. An error goes to record_failure(),
-  and the message comes back after its visibility timeout. An issue that was deleted, hidden or edited
-  since first sight completes as 'gone', with a 'skipped' step.
+  which puts the message back with a fresh read count, so provider errors are retried for 24 hours.
+- An issue that was deleted, hidden or edited since first sight completes as 'gone', with a 'skipped' step.
+- A message queued for another champion gets no call: the guess that counts belongs to the champion
+  models.lock named at first sight. It comes back after its visibility timeout.
+- A failed GitHub read moves on to the next message (at most MAX_READ_FAILURES per run); the message comes
+  back after its visibility timeout, and on its 6th read it becomes a dead letter, which fails the tick.
 """
 import os
 import time
@@ -20,7 +24,8 @@ from agents import champion
 from notary.canonical import content_sha256
 
 VT = 120  # seconds a claimed message stays hidden: if the worker dies, the message comes back after this
-MAX_CALLS = 10  # model calls per run
+MAX_CALLS = 10  # model calls per run, the probe included
+MAX_READ_FAILURES = 3  # failed GitHub reads per run
 BUDGET_S = 120  # no new call after this many seconds: the job's limit is 5 minutes
 DAILY_CAP_USD = 3  # note: the live cap; spend_today() sums the steps of job 'tick'
 OUTCOME = {"ok": "guessed", "refused": "refused", "invalid": "invalid"}  # step status -> complete() outcome
@@ -36,20 +41,21 @@ def run(db, read_issue, listed, cfg, client=None):
         if not os.environ.get("ANTHROPIC_API_KEY"):
             raise SystemExit("ANTHROPIC_API_KEY is not set")
         client = anthropic.Anthropic(max_retries=0, timeout=60)  # note: the next tick is the retry
-    n = {"guessed": 0, "refused": 0, "invalid": 0, "errors": 0, "gone": 0, "unreachable": 0, "capped": False,
-         "out_of_time": False, "breaker": "closed", "cost_usd": 0.0}
+    t0, calls, run_id = time.monotonic(), 0, os.environ.get("GITHUB_RUN_ID", "local")  # the probe counts too
+    n = {"guessed": 0, "refused": 0, "invalid": 0, "errors": 0, "gone": 0, "unreachable": 0, "other_champion": 0,
+         "capped": False, "out_of_time": False, "breaker": "closed", "cost_usd": 0.0}
     if db.execute("select prereg.spend_today('tick')").fetchone()[0] >= DAILY_CAP_USD:  # the cap covers the probe too
         n["capped"] = True
         return n
     if db.execute("select prereg.recent_provider_failures()").fetchone()[0]:
         step = champion.probe(cfg, client)
+        calls += 1
         db.execute("select prereg.record_probe(%s)", [Jsonb(step)])
         n["cost_usd"] = float(step["cost_usd"])
         if step["status"] != "ok":
             n.update(breaker="open", errors=1)
             return n
         n["breaker"] = "probe_ok"
-    t0, calls, run_id = time.monotonic(), 0, os.environ.get("GITHUB_RUN_ID", "local")
     while calls < MAX_CALLS:
         if time.monotonic() - t0 > BUDGET_S:
             n["out_of_time"] = True
@@ -60,20 +66,27 @@ def run(db, read_issue, listed, cfg, client=None):
         row = db.execute("select * from prereg.claim_next(%s, %s)", [VT, run_id]).fetchone()
         if row is None:
             break
-        attempt, _, number, _, _, seen_sha256 = row
+        attempt, _, number, queued_champion, _, seen_sha256 = row
+        if queued_champion != cfg["c"]["id"]:  # no call: the message comes back after VT
+            n["other_champion"] += 1
+            continue
         it = listed.get(number)
         if it is None:  # the ledger keeps no issue text, so a retry reads the issue again
             try:
                 it = read_issue(number)
             except urllib.error.HTTPError as e:
-                if e.code not in (404, 410):
-                    n["unreachable"] += 1  # GitHub trouble: the message comes back after VT
-                    break
+                if e.code not in (404, 410):  # GitHub trouble: the message comes back after VT
+                    n["unreachable"] += 1
+                    if n["unreachable"] >= MAX_READ_FAILURES:
+                        break
+                    continue
                 it = None
                 reason = f"HTTPError {e.code}"  # deleted or hidden
             except Exception:  # timeouts and broken replies: the message comes back after VT
                 n["unreachable"] += 1
-                break
+                if n["unreachable"] >= MAX_READ_FAILURES:
+                    break
+                continue
         if it is not None and content_sha256(it["title"], it["body"]) != seen_sha256:
             reason = "edited after first sight"  # guess only the text the job first saw
             it = None

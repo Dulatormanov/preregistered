@@ -6,13 +6,22 @@ Newest first. Each entry says what was decided and why.
 
 - **The worker** (`runner/worker.py`) guesses queued issues, one message at a time. It runs inside each tick, so `tick.yml` does not change: changing that file costs an hour or more of schedule.
   - The circuit breaker: if provider errors were saved in the last 60 minutes, one small probe call decides whether the run claims anything, so an outage adds no reads to waiting messages. The daily cap is checked before the probe too.
-  - An error stops the run. The message comes back after its 120-second visibility timeout.
+  - An error stops the run. `record_failure` puts the message back at once, with a fresh read count, so provider errors are retried on later ticks for 24 hours, and do not use up the 6-read limit.
   - A refusal or an invalid answer completes the message with no guess.
   - An issue that was deleted, hidden or edited since first sight completes as `gone`, with a `skipped` step. 'gone' now also covers the edited case.
 - **The revoke** (`db/006_revoke.sql`): the jobs write only through functions. `triage_agent` holds no table right at all. Its three remaining reads are functions: `newest_first_sight`, `unanchored_guesses` and `spend_today`, the plan's Build day 1 function, brought forward. `notary` keeps only the SELECT it hashes. `claim_next` also returns the first sight's content hash.
 - **Two end-to-end tests run in CI on Supabase's image:**
-  - `tests/test_tick.py` runs the real poll, worker and anchor job through 10 cases, with a fake GitHub and a fake Claude.
+  - `tests/test_tick.py` runs the real poll, worker and anchor job through 12 cases, with a fake GitHub and a fake Claude.
   - `tests/test_rollback.py` kills the worker with SIGKILL during its 3rd model call. It finds 2 guesses, each with one step and one finished event, and no duplicates. The 8 unfinished messages come back after the timeout. A rerun leaves exactly 10 guesses, and the killed attempt gets one 'abandoned' event.
+
+- **The Day 5 review** confirmed 7 findings. All are fixed:
+  - Provider errors no longer turn a message into a dead letter after 6 tries (see `record_failure` above).
+  - `complete` refuses a guess from any champion other than the one queued with the issue. The worker makes no call for such a message.
+  - A dead letter or an expired message fails the tick (`losses_since`), because that issue will never get its champion guess.
+  - The cutover: `006_revoke.sql` queues each issue the old code saw in the last 24 hours that has no champion guess and no final step yet, so it keeps its retries.
+  - The 2-minute limit counts from the start of the run, and the probe counts as one of the 10 calls.
+  - A failed GitHub read moves on to the next message, at most 3 times per run.
+  - `check_roles.sql` also covers views, materialized views, foreign tables and partitioned tables.
 
 ## 2026-11-05 (Day 4)
 
