@@ -1,0 +1,56 @@
+name: watchdog
+
+# The watchdog (ops/watchdog.py), every 30 minutes: missed or empty runs, dead letters, a stuck queue, guesses
+# with no anchor, token expiry, workflows turned off, and upstream issues the ledger never saw. The alert job
+# opens one issue per alert type. The Healthchecks check "watchdog" notices if these runs stop.
+on:
+  schedule:
+    - cron: "11,41 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: watchdog
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read  # the run list and the workflow states
+    outputs:
+      alerts: ${{ steps.check.outputs.alerts }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - run: |  # wheels only, so installing runs no package code
+          python3 -m venv .venv
+          .venv/bin/pip install -q --require-hashes --only-binary :all: -r requirements.txt
+      - id: check
+        run: .venv/bin/python -m ops.watchdog
+        env:
+          OBSERVER_DB_URL: ${{ secrets.OBSERVER_DB_URL }}  # the observer role: reads, never writes
+          GH_TOKEN: ${{ github.token }}  # not the read token, so a broken read token cannot blind the watchdog
+          HC_WATCHDOG_URL: ${{ secrets.HC_WATCHDOG_URL }}
+
+  alert:
+    needs: check
+    if: needs.check.outputs.alerts != '{}' && needs.check.outputs.alerts != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      issues: write  # one open issue per alert type; this job holds no database login
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ALERTS: ${{ needs.check.outputs.alerts }}
+        run: python3 -m ops.open_alerts

@@ -1,0 +1,180 @@
+# The registry: every job this project runs, who owns it, and what it may do (Build day 1).
+# tests/test_registry.py fails CI when a workflow job has no entry here, when a job holds a secret or a
+# `permissions:` grant that its entry does not list, when one job holds both a model key and a write right,
+# or when a tier has no suite or no human gate. ops/watchdog.py reads the cadence fields: it expects one
+# healthy run per slot, and alerts after 2 unhealthy slots in a row.
+#
+# autonomy: what a job may do by itself.
+#   read_report             read, and report to the ledger, a log or this repo's own issues
+#   carry_consented_update  carry out a write that a human approved, byte for byte
+#   initiate_contact        start a conversation with a person (no job has it)
+# There is no value for "write a commitment" (an owner, a due date, a status): no job can be given one.
+#
+# Slots: a run is due at every minute m where (m - Monday 2026-11-02 00:00 UTC) % cadence_min == at_minute.
+# evidence: event:<kind> is a prereg.run_events row; run:<file> is a successful scheduled run of that workflow.
+
+model_keys = ["ANTHROPIC_API_KEY"]
+write_secrets = ["PREREG_SANDBOX_WRITE"]
+
+[tier.read]
+what = "reads, and writes only to its own log or artifact"
+suite = "ci"
+human_gate = "a pull request into main"
+
+[tier.ledger]
+what = "adds rows to the ledger, only through its own role's functions"
+suite = "ci"
+human_gate = "a pull request into main"
+
+[tier.public_write]
+what = "posts in this repo (Notary log, weekly report, alert issues); every text passes the reference lint first"
+suite = "ci"
+human_gate = "a pull request into main"
+
+[tier.governed_write]
+what = "writes outside this repo, to the sandbox, with the sandbox write token"
+suite = "triage"
+human_gate = "the owner approves each run in the environment sandbox-write"
+
+[[job]]
+id = "tick/poll"
+owner = "Dulatormanov"
+tier = "ledger"
+autonomy = "read_report"
+suite = "triage"  # the model guesses here
+secrets = ["TRIAGE_DB_URL", "PREREG_READ_TOKEN", "ANTHROPIC_API_KEY", "HC_TICK_URL"]
+permissions = ["contents: read"]
+cadence_min = 15
+at_minute = 7
+grace_min = 45
+evidence = "event:polled"
+
+[[job]]
+id = "tick/anchor"  # runs after a poll that saved guesses; the watchdog alerts on any guess unanchored for 30 minutes
+owner = "Dulatormanov"
+tier = "public_write"
+autonomy = "read_report"
+suite = "ci"
+secrets = ["NOTARY_DB_URL", "HC_TICK_URL"]
+permissions = ["contents: read", "issues: write"]
+
+[[job]]
+id = "outcomes/collect"
+owner = "Dulatormanov"
+tier = "ledger"
+autonomy = "read_report"
+suite = "ci"
+secrets = ["COLLECTOR_DB_URL", "PREREG_READ_TOKEN"]
+permissions = ["contents: read"]
+cadence_min = 1440
+at_minute = 373  # 06:13 UTC
+grace_min = 180
+evidence = "run:outcomes.yml"
+
+[[job]]
+id = "outcomes/alert"
+owner = "Dulatormanov"
+tier = "public_write"
+autonomy = "read_report"
+suite = "ci"
+secrets = []
+permissions = ["contents: read", "issues: write"]
+
+[[job]]
+id = "weekly/build"
+owner = "Dulatormanov"
+tier = "read"
+autonomy = "read_report"
+suite = "ci"
+secrets = ["OBSERVER_DB_URL"]
+permissions = ["contents: read", "actions: read"]
+cadence_min = 10080
+at_minute = 443  # Monday 07:23 UTC
+grace_min = 240
+evidence = "run:weekly.yml"
+
+[[job]]
+id = "weekly/post"
+owner = "Dulatormanov"
+tier = "public_write"
+autonomy = "read_report"
+suite = "ci"
+secrets = []
+permissions = ["contents: read", "issues: write"]
+
+[[job]]
+id = "ci/test"
+owner = "Dulatormanov"
+tier = "read"
+autonomy = "read_report"
+suite = "ci"
+secrets = []
+permissions = ["contents: read"]
+
+[[job]]
+id = "suite/run"
+owner = "Dulatormanov"
+tier = "read"
+autonomy = "read_report"
+suite = "triage"
+secrets = ["GATE_DB_URL", "ANTHROPIC_API_KEY", "PREREG_READ_TOKEN"]
+permissions = ["contents: read"]
+
+[[job]]
+id = "dispatch/dispatch"  # started by hand; it starts the run that needs the write token, so the bot is its actor
+owner = "Dulatormanov"
+tier = "governed_write"
+autonomy = "read_report"
+suite = "ci"
+secrets = []
+permissions = ["actions: write"]
+
+[[job]]
+id = "probe/read-token"
+owner = "Dulatormanov"
+tier = "read"
+autonomy = "read_report"
+suite = "ci"
+secrets = ["PREREG_READ_TOKEN", "PREREG_SANDBOX_WRITE"]  # the second one is a control: it must arrive empty
+permissions = ["contents: read"]
+
+[[job]]
+id = "probe/write-token"
+owner = "Dulatormanov"
+tier = "governed_write"
+autonomy = "carry_consented_update"
+suite = "ci"
+secrets = ["PREREG_SANDBOX_WRITE"]
+permissions = ["contents: read"]
+environment = "sandbox-write"
+
+[[job]]
+id = "pg_cron/prereg-sweeper"  # not a workflow: db/008_cron.sql, run by pg_cron as postgres
+owner = "Dulatormanov"
+tier = "ledger"
+autonomy = "read_report"
+suite = "ci"
+secrets = []
+permissions = []
+cadence_min = 10
+at_minute = 0
+grace_min = 15
+evidence = "event:sweep_ran"
+
+[[job]]
+id = "watchdog/check"  # its own runs are watched by the Healthchecks check "watchdog" (period 30, grace 30)
+owner = "Dulatormanov"
+tier = "read"
+autonomy = "read_report"
+suite = "ci"
+secrets = ["OBSERVER_DB_URL", "HC_WATCHDOG_URL"]
+permissions = ["contents: read", "actions: read"]
+
+[[job]]
+id = "watchdog/alert"
+owner = "Dulatormanov"
+tier = "public_write"
+autonomy = "read_report"
+suite = "ci"
+secrets = []
+permissions = ["contents: read", "issues: write"]
