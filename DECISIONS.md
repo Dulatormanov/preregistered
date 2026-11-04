@@ -5,12 +5,13 @@ Newest first. Each entry says what was decided and why.
 ## 2026-11-05 (Day 4)
 
 - **The golden set** (`golden/build.py`): 688 issues created May 1 to Oct 31. It keeps their numbers, content hashes, close reasons and label events, with each actor's type and whether the actor was the issue's author. It never keeps issue text or a login. The label events stay in a git-ignored file, because their times would show how fast the maintainers work.
-- **The sealed set is fixed:** 151 issues created Sep 20 to Oct 31. `golden/v1/sealed_list.csv` holds their numbers and content hashes, and no labels. `golden/v1/SEALED.sha256` holds that list's hash, `5ce27096ce15ff3c253e803e5f74173ba92123c61ad44089fd1a52d495d179ab`. It is anchored on the Notary log before any tuning.
+- **The sealed set is fixed:** 151 issues created Sep 20 to Oct 31. `golden/v1/sealed_list.csv` holds their numbers and content hashes, and no labels. `golden/v1/SEALED.sha256` holds that list's hash, `5ce27096ce15ff3c253e803e5f74173ba92123c61ad44089fd1a52d495d179ab`. Anchor 5 on the Notary log (2026-11-04 19:56:55 UTC, commit 66718bf) pins it before any tuning. The run was dispatched from the owner's account.
 - **Ground truth** (ADR-006): the first counting label, within 14 days, added by a human who is not the author. Every one of Supabase's 121 labels is either mapped to an area or ignored.
 - **Check 12 result:** only frontend has at least 15 scorable sealed issues. The other five areas cannot reach the promotion bar. The bar stays as it is, and the plan's fallback (synthetic sandbox issues) covers the governed write.
 - **The reference lint** (`scripts/lint_refs.py`) blocks cross-repo references, issue URLs, bare `#N` and @mentions, and allows this repo's own URLs. The anchor job lints every text before it posts.
 - **Outcomes:** `db/005_outcomes.sql` adds the collector role and `prereg.outcomes`, which is written only through `record_outcome()`. Each GitHub event is saved once, because its id's hash is unique. `outcomes.yml` runs daily, and opens one alert issue for an unknown label.
 - **Migration numbers:** `005` is now the outcomes, so the cron jobs become `006`.
+- **The first outcomes run** (2026-11-04) saved 12 label events on the 4 live issues. Each issue got `bug`, added by its author through the issue form, and `external-issue` and `to-triage`, added by a bot. None of them counts as truth, which is just what the rules say.
 - **Check 3, first result:** in the one hour that ran normally (the 18:00 UTC slots on Nov 4), ticks started 1 to 26 minutes after their slot, 16 minutes at the median. After each push that changed `tick.yml`, GitHub ran no scheduled tick for an hour or more. So `tick.yml` changes as rarely as possible. Check 3 is measured again on Day 7, with more days of data.
 
 ## 2026-11-05 (Day 3)
@@ -39,7 +40,7 @@ Newest first. Each entry says what was decided and why.
 
   The function suite now has 16 tests.
 - **Supabase's platform roles.** Besides `postgres`, `supabase_etl_admin` and `supabase_read_only_user` read everything through `pg_read_all_data`. None of them can change a row. `credentials.toml` lists them, and the matrix test now checks every role.
-- **Check 10 result: passed.** CI runs every migration and database test on `supabase/postgres:17.11.0.018` on each push to main. **Check 11 result:** pending.
+- **Check 10 result: passed.** CI runs every migration and database test on `supabase/postgres:17.11.0.018` on each push to main. **Check 11 result: passed.** On prereg-prod, triage_agent ran enqueue, claim, complete and a repeated complete ('already_done'). All of it ran in one transaction that rolled back, with a fake issue number, so the ledger kept nothing. pgmq works inside the SECURITY DEFINER functions on hosted Supabase.
 
 ## 2026-11-05 (Day 2)
 
