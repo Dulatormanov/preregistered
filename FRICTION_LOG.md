@@ -10,3 +10,9 @@ What was harder than it should be, and what it cost.
 - The schedule never started. The workflow was disabled when `tick.yml` was pushed, and enabling it at 10:56 UTC did not register the cron lines: no scheduled run came in the next 4.5 hours. Pushing a change to `tick.yml` at about 15:35 UTC was the fix to try. The ledger has no ticks between 10:57 and then.
 - GitHub opened an incident at 16:05 UTC ("Incident with Actions and Pages", Actions partial outage). By then the schedule had still never fired; runs started by hand kept working.
 - After every push that changed `tick.yml` (15:30, 16:22 and 19:05 UTC on Nov 4), GitHub's scheduler skipped the next hour or more of slots. From now on, the logic lives in Python files and `tick.yml` stays as it is.
+
+## 2026-11-04 (Days 5 to 7, built the same evening)
+
+- After the 19:05 UTC push (Day 2, the last change to `tick.yml`), GitHub ran no scheduled tick for hours: none from 18:53 UTC until at least 21:40 UTC. GitHub's status page showed no open incident. A tick started by hand worked. Hand-started ticks do not stand in for the schedule: the weekly report counts them apart, as tick runs that fill no slot.
+- The plan's package name `platform/` would clash with Python's own `platform` module, which the Anthropic SDK imports. Build day 1 uses `core/` instead.
+
