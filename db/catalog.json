@@ -1,0 +1,20 @@
+{
+ "prereg.claim_next(integer,text)": "21345f27b456184a288cba131963280938047e3a9080b83799a559373260dcda",
+ "prereg.complete(bigint,text,text,boolean,text,jsonb)": "2bac972577ee869176be56fd056cd1149ea63c84a2b5cc793e24a5919db86295",
+ "prereg.enqueue_issue(integer,timestamp with time zone,text,text[],text,jsonb)": "26b09e8592072fab71786e6ea1fe0b6c9d947093358a9ccee6a6f0a0b9089f8e",
+ "prereg.log_event(text,jsonb)": "74223a6fe9abdf6e99ececfbb539c21fa46002928e738d36e91fdbb6ae7ea812",
+ "prereg.losses_since(timestamp with time zone)": "6273fccf9aa5b83effb726f00f7016f937eb158ecfe335dca48ba1f26c5490cc",
+ "prereg.newest_first_sight()": "3384ebc6dfdceffed95488d19eca7d2987f1f9d45e21d923ea9e00366321ed2a",
+ "prereg.queue_health()": "717d3de1a32628d00f0646de33f0232689da756a9ed14c205d10585604519a75",
+ "prereg.recent_provider_failures()": "e37d8e9b248aa7dd6b556a7a3830fa258c6c58c8f90ad9d2ded0469a1c382f42",
+ "prereg.record_anchor(text,text,bigint,bigint,timestamp with time zone)": "48f199bdeff222cf51d5df91ac4cd75f5c5c0fcee1ba18b8462fcb2015597d49",
+ "prereg.record_failure(bigint,jsonb)": "8531e1f0d44d0ea9dd179446fdf63c59d7755367e2b2d3bb19d1465daecff1c7",
+ "prereg.record_gate_step(text,integer,jsonb)": "68b9af7ab9b087ef46ab1231f9ac072764916eaccd641b57c4c45a5d5d8f3358",
+ "prereg.record_outcome(integer,text,text,text,text,boolean,timestamp with time zone)": "3028564941ecfa4df39aa03c9e8594aa000ac544f115db842b9598e7dc57c6a0",
+ "prereg.record_probe(jsonb)": "92519c7096bda628129974bb709ddeda975ecafb350b8166a416053fb95f1819",
+ "prereg.save_step(text,integer,jsonb)": "3dd3c422b60271c32418547cb87871937c61b56a79599f8d7ab0d0452301f896",
+ "prereg.spend_today(text)": "ec2bfd0d7869653bb1aa973f463c12865c091b4c614142cc8f58291ce265a169",
+ "prereg.spend_total(text)": "45b7d825e7be15fccd20b5758728f2873543a52fe3a3b06da204bcea43f16fde",
+ "prereg.sweep_abandoned(interval)": "d8c71e3bd7373c3051faeb54709d2891ac43f98199636f6b21aa359bcafa9e43",
+ "prereg.unanchored_guesses()": "60db5d2d6a968a3535b869eccef7fec1894feaa0edf17c0fa19ca1c7f1d53367"
+}
