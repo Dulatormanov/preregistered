@@ -59,11 +59,12 @@ def render(start, rows, runs):
     end = start + timedelta(days=6)
     lines = [f"**Weekly report v0, {start:%b} {start.day} to {end:%b} {end.day}, UTC.** Counts only; no model wrote"
              f" this. A missed slot is a 15-minute slot with no scheduled tick.", "", HEAD]
+    tail = ["", "Independent project, not affiliated with Supabase."]
     for day, slots, champion, baseline, dead, expired, anchors, spend in rows:
         r = runs.get(day.isoformat(), {"ticks": 0, "failed": 0, "minutes": 0.0})
         lines.append(f"| {day:%a %b} {day.day} | {r['ticks']} | {SLOTS_PER_DAY - slots} | {r['failed']} | {champion}"
                      f" | {baseline} | {dead} | {expired} | {anchors} | {spend:.4f} | {r['minutes']:.0f} |")
-    text = "\n".join(lines)
+    text = "\n".join(lines + tail)
     if lint_refs(text):  # every posted text passes the reference lint first
         raise SystemExit("the report failed the reference lint")
     return text
