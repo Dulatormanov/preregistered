@@ -2,6 +2,15 @@
 
 Newest first. Each entry says what was decided and why.
 
+## 2026-11-05 (Day 7, started early)
+
+- **The weekly report v0** (`ops/weekly_report.py` and `weekly.yml`, Mondays at 07:23 UTC) is one comment on the Weekly reports issue, written with no model. Per UTC day it shows tick runs, missed slots, failed runs, champion and baseline guesses, dead letters, expired messages, anchors, spend and Actions time. Days before the first tick are left out.
+  - A missed slot is a 15-minute slot with no scheduled tick. A tick started by hand fills no slot, so the report shows how often GitHub's scheduler really ran.
+  - Actions time is wall-clock time from the run list, so one API call covers 100 runs. It includes any time a run waits for an approval.
+  - Dead letters are counted from `run_events`, because observer cannot read the pgmq tables.
+- **Two jobs, as in `outcomes.yml`.** The build job holds the observer login and `actions: read`. The post job holds `issues: write` and no database login, and gets only the report text.
+- `OBSERVER_DB_URL` is now a repo secret. `credentials.toml` lists it, and its GITHUB_TOKEN entry now names every job that gets a write permission.
+
 ## 2026-11-05 (Day 6, started early)
 
 - **The sandbox** is the public repo `Dulatormanov/prereg-sandbox`. It has the six area labels plus `needs-details`, `probe-label` and `probe-side-door`, one probe issue, the 20 prompt-injection fixtures (each with a clearly fake canary), and `side_door_demo.yml`, which closes any issue that gets `probe-side-door`.

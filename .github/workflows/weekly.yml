@@ -1,0 +1,53 @@
+name: weekly
+
+# The weekly report v0 (ops/weekly_report.py), with no model: one comment on the Weekly reports issue each Monday.
+on:
+  schedule:
+    - cron: "23 7 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read  # the run list
+    outputs:
+      report: ${{ steps.report.outputs.report }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - run: |  # wheels only, so installing runs no package code
+          python3 -m venv .venv
+          .venv/bin/pip install -q --require-hashes --only-binary :all: -r requirements.txt
+      - id: report
+        run: |
+          .venv/bin/python -m ops.weekly_report > report.md
+          { echo "report<<EOF_REPORT"; cat report.md; echo "EOF_REPORT"; } >> "$GITHUB_OUTPUT"
+        env:
+          OBSERVER_DB_URL: ${{ secrets.OBSERVER_DB_URL }}  # the observer role: reads, never writes
+          GH_TOKEN: ${{ github.token }}
+
+  post:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      issues: write  # one comment on the Weekly reports issue; this job holds no database login
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REPORT: ${{ needs.build.outputs.report }}
+        run: |
+          printf '%s\n' "$REPORT" > report.md
+          python3 scripts/lint_refs.py report.md  # every posted text passes the reference lint
+          gh issue comment 2 --body-file report.md  # issue 2 is "Weekly reports (subscribe here)"
