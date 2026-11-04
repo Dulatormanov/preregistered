@@ -1,6 +1,10 @@
 -- 001_ledger.sql: the insert-only ledger.
--- Run once as `postgres` in the Supabase SQL editor.
+-- Run once as `postgres` in the Supabase SQL editor, then run check_roles.sql.
 begin;
+
+-- Postgres 16+: CREATE ROLE grants each new role back to postgres. Empty keeps
+-- that grant ADMIN-only, whatever the server default is, so postgres gets no rights by surprise.
+set local createrole_self_grant = '';
 
 -- Check 1: a NOLOGIN owner. postgres may SET ROLE to it on purpose,
 -- but does not get its rights by default.
