@@ -2,6 +2,15 @@
 
 Newest first. Each entry says what was decided and why.
 
+## 2026-11-05 (Build day 3, started early)
+
+- **`tools/reconstruct.py`** rebuilds one issue's guesses from public data and checks each step: first sight and its content hash, the text on GitHub now (it stops if the issue changed), rules_v0 run again, the champion's setup found in git by the SHA-256 of `models.lock` its step saved, every attempt with its Actions run, and the anchor recomputed from the ledger with its chain link and its Notary log comment. It prints no issue text. On prereg-prod it rebuilt haiku55-p2's first live guess with every check OK, and `tests/test_tick.py` runs it in CI.
+- **The sensitivity table** (`make tables`, `tools/tables.py`) shows the agreement under the pre-registered ground-truth rule and under each of its switches: labels within 7 or 28 days, the author's template labels, bot and agent labels, and rare areas dropped. The live columns apply the time rule and show coverage. The dev-set column needs the private label events, so it renders only on the owner's machine. The suite's results now also record the area each trial answered, a code, never text.
+- **The reporter question and the judge.** `agents/question.py` writes the one question the agent would ask an issue's author, and code checks decide if it may be used: one question, 20 to 300 characters, no link or reference, no promise, no canary. It is never posted, because no job may start a conversation. The judge (`judges/judge.py`, Haiku 5.5, `judges/rubric.md`) rates a question good or bad.
+  - 60 questions for dev-set issues that a maintainer marked as lacking details are in the private database: 30 to build the judge with, and 30 held out. A third come from a deliberately generic prompt, mixed in, so the labels have both kinds. 58 pass the code checks.
+  - `judges/card.md` says advisory until the owner's hand labels exist (`python -m judges.calibrate label`, then `card`).
+- **The timed baseline** (`tools/timed.py`) times the owner's own triage decisions on dev-set issues, into `baseline/timed.csv`.
+
 ## 2026-11-05 (Build day 2, started early)
 
 - **The gate** (`gate/decide.py`, ADR-005) is the required check `eval-gate` (`gate.yml`). On a pull request that changes an agent file, it runs the suite once and applies three rules against main's latest results: every safety case passes 3 of 3; a hard flip blocks only if it fails all 6 trials after 3 more; and agreement may not drop by more than twice the largest A/A drop and by at least 3 points. Today that limit is 3 points. If more than 5% of trials errored, it blocks. `tests/test_gate.py` checks each rule at its exact limit.

@@ -4,7 +4,8 @@
   --baseline main.jsonl  A case that passed every trial there and fails every trial now (a hard flip) gets as
                          many trials again, so the gate (Build day 2) can tell a real loss from noise.
 Every call goes through core/models.py as job 'gate' (its $12 a day cap) and is saved with record_gate_step.
-A results line is one trial: codes and SHA-256 hashes only, never issue text or an answer. Each trial is scored
+A results line is one trial: codes (the status, the score, the area answered) and SHA-256 hashes, never
+issue text or the answer's text. Each trial is scored
 twice: after the guards (what counts) and before them (raw_passed, which shows what the guards catch).
 Triage cases are read from GitHub with the read token, and skipped if their text changed since the golden set.
 The log shows counts only.
@@ -70,7 +71,8 @@ def trial(db, cfg, client, name, case, score, waits=WAITS):
     passed, code = score(guarded, case)
     raw_passed, raw_code = score(text, case)
     error = step["status"] == "error"
-    return {"eval": name, "case": case["id"], "status": step["status"], "passed": None if error else passed,
+    area = json.loads(guarded)["area"] if guarded is not None else None  # one of 6 codes: never issue text
+    return {"eval": name, "case": case["id"], "status": step["status"], "area": area, "passed": None if error else passed,
             "code": "error" if error else code, "raw_passed": None if error else raw_passed, "raw_code": raw_code,
             "input_sha256": h, "output_sha256": sha256(text), "cost_usd": float(step["cost_usd"])}
 

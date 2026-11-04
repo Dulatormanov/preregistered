@@ -28,6 +28,7 @@ from agents import champion  # noqa: E402
 from notary import anchor  # noqa: E402
 from notary.canonical import FIELDS, GENESIS, anchor_text, chain, content_sha256, file_text  # noqa: E402
 from runner import poll, worker  # noqa: E402
+from tools.reconstruct import reconstruct  # noqa: E402
 
 worker.VT = 1  # a claimed message comes back after 1 second in this test
 NOW = datetime.now(timezone.utc)
@@ -148,6 +149,11 @@ def main():
     anchor.main()
     assert len(COMMENTS) == 1 and COMMENTS[0]["body"].startswith("canon=v1 kind=rows upto=6 n=6 ")
     print("ok 1: 3 issues -> 3 baseline and 3 champion guesses, 3 steps, 1 rows anchor")
+    with psycopg.connect(role_url("observer"), autocommit=True) as o:  # tools/reconstruct.py rebuilds one of them
+        lines = []
+        assert reconstruct(o, 101, out=lines.append), "\n".join(lines)
+        assert sum(line.startswith("  OK") for line in lines) == 7 and "Magic" not in "".join(lines)  # no issue text
+    print("ok 1b: reconstruct.py rebuilds issue 101 from the ledger, git, GitHub and the Notary log")
 
     # 2. a provider error: the step is saved, the run stops claiming, the job fails, the message comes back
     FAIL[0] = True
