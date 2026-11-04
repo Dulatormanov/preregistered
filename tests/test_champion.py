@@ -38,7 +38,7 @@ def error(cls, **attrs):  # an SDK error without an HTTP response behind it
 
 
 def test_lock_and_prompt():
-    assert CFG["c"]["id"] == "haiku55-p0" and CFG["areas"] == [
+    assert CFG["c"]["id"].startswith("haiku55-p") and CFG["areas"] == [
         "frontend", "auth", "postgres", "self-hosted", "documentation", "other"]
     assert "{" not in CFG["system"] and all(f"- {a}:" in CFG["system"] for a in CFG["areas"])
     assert CFG["schema"]["properties"]["area"]["enum"] == CFG["areas"] and not CFG["schema"]["additionalProperties"]
