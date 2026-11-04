@@ -97,16 +97,19 @@ def main():
         except BaseException as e:  # record the run and its outputs first, then fail loudly
             n, failure = {"error": type(e).__name__}, e
         pending = db.execute("select prereg.unanchored_guesses()").fetchone()[0]
-        event.update(issues=len(issues), saved=saved, pending=pending, champion=n)
+        lost = db.execute("select prereg.losses_since(%s)", [started]).fetchone()[0]  # dead letters, expiries
+        event.update(issues=len(issues), saved=saved, pending=pending, champion=n, lost=lost)
         db.execute("select prereg.log_event('polled', %s)", [Jsonb(event)])
     anchor = "yes" if pending or os.environ.get("ANCHOR_FILE", "").strip() else "no"
-    print(f"polled http={event.get('http_status')} issues={len(issues)} saved={saved} pending={pending}"
+    print(f"polled http={event.get('http_status')} issues={len(issues)} saved={saved} pending={pending} lost={lost}"
           f" champion: {' '.join(f'{k}={v}' for k, v in n.items())}")
     if "GITHUB_OUTPUT" in os.environ:
         with open(os.environ["GITHUB_OUTPUT"], "a") as f:
             f.write(f"pending={pending}\nanchor={anchor}\n")
     if failure:
         raise failure
+    if lost:  # a queued issue will never get its champion guess
+        sys.exit(f"{lost} queued guesses were lost this tick (dead letters or expiries): see run_events")
     if n["errors"] and not (n["guessed"] or n["refused"] or n["invalid"]):  # no call got any answer
         sys.exit("the champion got no answer: check the Anthropic key and status page")  # fail loudly
 

@@ -26,12 +26,12 @@ from setup_test_db import admin_url, role_url  # noqa: E402
 
 from agents import champion  # noqa: E402
 from notary import anchor  # noqa: E402
-from notary.canonical import FIELDS, GENESIS, anchor_text, chain, file_text  # noqa: E402
+from notary.canonical import FIELDS, GENESIS, anchor_text, chain, content_sha256, file_text  # noqa: E402
 from runner import poll, worker  # noqa: E402
 
 worker.VT = 1  # a claimed message comes back after 1 second in this test
 NOW = datetime.now(timezone.utc)
-ISSUES, COMMENTS, DELETED, FAIL, DOWN = [], [], set(), [False], [False]
+ISSUES, COMMENTS, DELETED, BROKEN, FAIL, DOWN = [], [], set(), set(), [False], [False]  # BROKEN: GET answers 502
 
 
 class Resp(io.BytesIO):
@@ -50,7 +50,10 @@ def fake_urlopen(req, timeout=None):
         live = sorted((i for i in ISSUES if i["number"] not in DELETED), key=lambda i: i["created_at"], reverse=True)
         return Resp(live[(page - 1) * per: page * per])
     if u.path.startswith("/repos/supabase/supabase/issues/"):
-        hit = [i for i in ISSUES if i["number"] == int(u.path.rsplit("/", 1)[1]) and i["number"] not in DELETED]
+        n = int(u.path.rsplit("/", 1)[1])
+        if n in BROKEN:
+            raise urllib.error.HTTPError(req.full_url, 502, "Bad Gateway", {}, None)
+        hit = [i for i in ISSUES if i["number"] == n and i["number"] not in DELETED]
         if not hit:
             raise urllib.error.HTTPError(req.full_url, 404, "Not Found", {}, None)
         return Resp(hit[0])
@@ -157,7 +160,7 @@ def main():
     calls = len(FakeClaude.calls)
     tick(fails=True)
     assert len(FakeClaude.calls) == calls + 1 and champion.PROBE[0] in FakeClaude.calls[-1]  # the probe only
-    assert look("select read_ct from pgmq.q_triage_events")[0][0] == 1  # no read added during the outage
+    assert look("select read_ct from pgmq.q_triage_events")[0][0] == 0  # sent back fresh; no read during the outage
     FAIL[0] = False
     time.sleep(1.1)  # the failed message is hidden for worker.VT = 1 second
     tick()
@@ -236,6 +239,38 @@ def main():
     assert upto == preds[-1]["id"]
     assert "Magic login" not in json.dumps(look("select * from prereg.steps"), default=str)
     print(f"ok 9: {len(COMMENTS)} comments recompute and chain; all {len(preds)} guesses covered; no issue text in steps")
+
+    def queue_directly(n, title, champion):  # a first sight from long ago, so the listing no longer shows it
+        issue(n, title, minutes_ago=180)
+        it = ISSUES[-1]
+        with psycopg.connect(role_url("triage_agent"), autocommit=True) as t:
+            t.execute("select prereg.enqueue_issue(%s, now(), %s, '{}', %s, null)",
+                      [n, content_sha256(it["title"], it["body"]), champion])
+
+    def last_run():
+        return look("select data->'champion' from prereg.run_events where kind = 'polled' order by id desc limit 1")[0][0]
+
+    # 11. a failed GitHub read: the worker goes on to the next message, and the issue is guessed later
+    queue_directly(110, "Login fails on Safari", champion_id)
+    BROKEN.add(110)
+    issue(111, "Login fails on Firefox", 0)
+    tick()
+    assert last_run()["unreachable"] == 1 and guesses(111)[-1] == (champion_id, "auth") and len(guesses(110)) == 0
+    BROKEN.discard(110)
+    time.sleep(1.1)  # the claimed message is hidden for worker.VT = 1 second
+    tick()
+    assert guesses(110) == [(champion_id, "auth")]
+    print("ok 11: a failed GitHub read moves on to the next message; the issue is guessed on a later tick")
+
+    # 12. a message queued for another champion gets no call
+    queue_directly(112, "Login loops", "an-older-champion")
+    calls = len(FakeClaude.calls)
+    tick()
+    assert last_run()["other_champion"] == 1 and len(guesses(112)) == 0
+    assert not any("Login loops" in c for c in FakeClaude.calls[calls:])
+    with psycopg.connect(admin_url(), autocommit=True) as c:  # take it out, so it cannot become a dead letter later
+        c.execute("delete from pgmq.q_triage_events where message->>'issue_number' = '112'")
+    print("ok 12: a message for another champion gets no call")
 
     # 10. GitHub is down: the run is recorded with the error, and the job fails
     DOWN[0] = True

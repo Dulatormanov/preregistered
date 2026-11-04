@@ -78,9 +78,88 @@ begin
   end loop;
 end $$;
 
+-- A provider failure puts the message back with a fresh read count, behind newer work. So only the 24-hour
+-- expiry ends the retries after provider errors, and the 6-read limit still catches crashes and failed reads.
+create or replace function prereg.record_failure(p_attempt_id bigint, p_step jsonb)
+returns void language plpgsql security definer set search_path = pg_catalog, pg_temp as $$
+declare
+  a prereg.runs;
+begin
+  if p_attempt_id is null then
+    perform prereg.save_step('tick', null, p_step || '{"status": "error"}');
+    return;
+  end if;
+  select * into a from prereg.runs where id = p_attempt_id;
+  if not found then
+    raise exception 'no attempt %', p_attempt_id using errcode = '22023';
+  end if;
+  perform prereg.save_step('tick', a.issue_number, p_step || '{"status": "error"}');
+  insert into prereg.run_events (kind, data)
+  values ('failed', jsonb_build_object('attempt_id', a.id, 'msg_id', a.msg_id, 'issue_number', a.issue_number));
+  if pgmq.delete('triage_events', a.msg_id) then  -- the delete's result stops a repeated call from sending twice
+    perform pgmq.send('triage_events', jsonb_build_object('issue_number', a.issue_number, 'champion_id', a.champion_id));
+  end if;
+end $$;
+
+-- complete() now also refuses a guess by any champion but the one queued with the issue (PREREGISTRATION.md:
+-- the guess that counts is trial 1 of the champion models.lock named when the issue was first seen).
+create or replace function prereg.complete(p_attempt_id bigint, p_outcome text, p_area text, p_needs_details boolean,
+                                           p_input_sha256 text, p_step jsonb)
+returns text language plpgsql security definer set search_path = pg_catalog, pg_temp as $$
+declare
+  a prereg.runs;
+begin
+  -- "C": a parameter takes the caller's collation, which could make two different words compare equal.
+  if p_outcome is null or p_outcome collate "C" not in ('guessed', 'refused', 'invalid', 'gone') then
+    raise exception 'unknown outcome %', p_outcome using errcode = '22023';
+  end if;
+  if p_step->>'status' = 'error' then
+    raise exception 'a failed call goes to record_failure, not complete' using errcode = '22023';
+  end if;
+  select * into a from prereg.runs where id = p_attempt_id;
+  if not found then
+    raise exception 'no attempt %', p_attempt_id using errcode = '22023';
+  end if;
+  if p_outcome collate "C" = 'guessed' and (p_step->>'champion_id') collate "C" is distinct from a.champion_id then
+    raise exception 'the guess must come from the champion queued with the issue' using errcode = '22023';
+  end if;
+  if not pgmq.delete('triage_events', a.msg_id) then
+    return 'already_done';
+  end if;
+  if p_step is not null then
+    perform prereg.save_step('tick', a.issue_number, p_step);  -- 'tick': the live guesses, under the daily cap
+  end if;
+  if p_outcome collate "C" = 'guessed' then
+    insert into prereg.predictions (issue_number, champion_id, area, needs_details, input_sha256)
+    values (a.issue_number, a.champion_id, p_area, p_needs_details, p_input_sha256);
+  end if;
+  insert into prereg.run_events (kind, data)
+  values ('finished', jsonb_build_object('attempt_id', a.id, 'msg_id', a.msg_id, 'issue_number', a.issue_number,
+                                         'outcome', p_outcome));
+  return 'done';
+end $$;
+
+-- How many guesses were lost since a time: dead letters and expired messages. The poll fails loudly on any.
+create function prereg.losses_since(p_since timestamptz)
+returns bigint language sql stable security definer set search_path = pg_catalog, pg_temp as $$
+  select count(*) from prereg.run_events where kind in ('dead_letter', 'expired') and created_at >= p_since;
+$$;
+
 revoke execute on all functions in schema prereg from public;
 grant execute on function prereg.claim_next(int, text), prereg.newest_first_sight(), prereg.unanchored_guesses(),
-                          prereg.spend_today(text), prereg.record_probe(jsonb) to triage_agent;
+                          prereg.spend_today(text), prereg.record_probe(jsonb), prereg.losses_since(timestamptz)
+                          to triage_agent;
+
+-- The cutover: an issue that the old code saw in the last 24 hours, and that has no champion guess and no
+-- final step yet, is queued now, so it keeps its retries. The lock waits for a tick of the old code to end.
+lock table prereg.issues_seen, prereg.predictions, prereg.steps in share row exclusive mode;
+select pgmq.send('triage_events', jsonb_build_object('issue_number', s.issue_number, 'champion_id', 'haiku55-p0'))
+from prereg.issues_seen s
+where s.first_seen_at > clock_timestamp() - interval '24 hours'
+  and not exists (select from prereg.predictions p where p.issue_number = s.issue_number
+                  and p.champion_id = 'haiku55-p0' and p.trial = 1)
+  and not exists (select from prereg.steps t where t.issue_number = s.issue_number
+                  and t.champion_id = 'haiku55-p0' and t.status in ('refused', 'invalid', 'skipped'));
 
 -- The revoke: the Day 0 and Day 2 table rights of the poll and anchor jobs end here.
 revoke all on all tables in schema prereg from triage_agent, notary;

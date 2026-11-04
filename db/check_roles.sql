@@ -3,14 +3,15 @@
 -- It describes the state after the newest migration in db/.
 -- Relations are found by number, not by name: postgres may not look up names inside prereg.
 with t as (select oid, relname from pg_class where relnamespace = 'prereg'::regnamespace and relkind = 'r'),
-     rel as (select oid from pg_class where relnamespace = 'prereg'::regnamespace and relkind in ('r', 'p', 'v', 'm', 'f')),
+     rel as (select oid, relname from pg_class where relnamespace = 'prereg'::regnamespace
+             and relkind in ('r', 'p', 'v', 'm', 'f')),  -- tables, views and the rest: a view can be written
      job as (select oid, rolname from pg_roles where rolname in ('triage_agent', 'notary', 'observer', 'collector')),
      r as (select oid, rolname from pg_roles
            where rolname in ('postgres', 'triage_agent', 'notary', 'observer', 'collector', 'anon', 'authenticated',
                              'service_role')),
-     adders as (select t.relname, array_agg(distinct r.rolname::text order by r.rolname::text) as roles
-                from t join pg_attribute a on a.attrelid = t.oid and a.attnum > 0 and not a.attisdropped, r
-                where has_column_privilege(r.oid, t.oid, a.attnum, 'INSERT') group by t.relname)
+     adders as (select rel.relname, array_agg(distinct r.rolname::text order by r.rolname::text) as roles
+                from rel join pg_attribute a on a.attrelid = rel.oid and a.attnum > 0 and not a.attisdropped, r
+                where has_column_privilege(r.oid, rel.oid, a.attnum, 'INSERT') group by rel.relname)
 select check_name, ok from (values
   ('1. postgres does not get the rights of prereg_owner or of a job role by default',
    not exists (select from pg_roles x where x.rolname in ('prereg_owner', 'triage_agent', 'notary', 'observer', 'collector')
@@ -25,9 +26,9 @@ select check_name, ok from (values
                    and case when sq.relkind = 'S' then has_sequence_privilege(r.oid, sq.oid, 'USAGE, UPDATE') end)
    and not exists (select from r where has_schema_privilege(r.oid, 'prereg'::regnamespace, 'CREATE'))),
   ('4. no role can choose an id or a time',
-   not exists (select from t join pg_attribute a on a.attrelid = t.oid, r
+   not exists (select from rel join pg_attribute a on a.attrelid = rel.oid, r
                where a.attname in ('id', 'created_at', 'first_seen_at')
-                 and has_column_privilege(r.oid, t.oid, a.attnum, 'INSERT'))),
+                 and has_column_privilege(r.oid, rel.oid, a.attnum, 'INSERT'))),
   ('5. the API roles cannot read any column of the ledger',
    not exists (select from rel, r where r.rolname in ('anon', 'authenticated', 'service_role')
                                     and has_any_column_privilege(r.oid, rel.oid, 'SELECT'))),
@@ -51,7 +52,7 @@ select check_name, ok from (values
              and has_function_privilege(r.oid, f.oid, 'EXECUTE')) x), '{}')
    = coalesce((select array_agg(e order by e) from unnest(array[
         'claim_next:triage_agent', 'complete:triage_agent', 'enqueue_issue:triage_agent', 'log_event:triage_agent',
-        'newest_first_sight:triage_agent', 'recent_provider_failures:triage_agent', 'record_anchor:notary',
+        'losses_since:triage_agent', 'newest_first_sight:triage_agent', 'recent_provider_failures:triage_agent', 'record_anchor:notary',
         'record_failure:triage_agent', 'record_outcome:collector', 'record_probe:triage_agent',
         'spend_today:triage_agent', 'unanchored_guesses:triage_agent']) e  -- only the functions that exist yet
       where exists (select from pg_proc f where f.pronamespace = 'prereg'::regnamespace

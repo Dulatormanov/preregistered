@@ -78,15 +78,13 @@ def test_a_gone_issue_finishes_without_a_guess():
 
 
 def test_a_poison_message_goes_to_the_dead_letter_queue_on_its_6th_read():
-    with job() as t:
+    with job() as t:  # a poison message: every worker that takes it dies before it can finish
         enqueue(t, 9003)
         for read in range(1, 6):
-            attempt, _, issue, _, read_ct, _ = claim(t, vt=1)
+            _, _, issue, _, read_ct, _ = claim(t, vt=1)
             assert (issue, read_ct) == (9003, read)
-            t.execute("select prereg.record_failure(%s, %s)", [attempt, Jsonb(dict(STEP, error="APIStatusError 529"))])
             time.sleep(1.2)  # past the 1-second visibility timeout
         assert claim(t, vt=1) is None  # the 6th read moves it to triage_dlq instead
-        assert t.execute("select prereg.recent_provider_failures()").fetchone()[0] >= 5
     assert look("select count(*) from pgmq.q_triage_dlq where message->>'issue_number' = '9003'")[0][0] == 1
     assert look("select count(*) from pgmq.q_triage_events where message->>'issue_number' = '9003'")[0][0] == 0
     assert look("select data->>'read_ct', data->>'reason' from prereg.run_events where kind = 'dead_letter'"
@@ -115,10 +113,12 @@ def test_the_sweep_marks_an_attempt_that_never_finished():
     with job() as t:
         enqueue(t, 9005)
         attempt = claim(t)[0]  # the job dies here: no complete, no failure
-    assert look("select prereg.sweep_abandoned('0 seconds')")[0][0] == 1
+    assert look("select prereg.sweep_abandoned('0 seconds')")[0][0] >= 1  # the poison test's dead workers count too
     assert look("select prereg.sweep_abandoned('0 seconds')")[0][0] == 0  # marked once only
     assert look("select count(*) from prereg.run_events where kind = 'abandoned' and data->>'attempt_id' = %s",
                 str(attempt))[0][0] == 1
+    with job() as t:  # finish it, so its message cannot come back into a later test
+        assert complete(t, attempt, "gone", step=dict(STEP, status="skipped")) == "done"
 
 
 def test_an_outcome_is_saved_once_and_only_through_record_outcome():
@@ -132,6 +132,23 @@ def test_an_outcome_is_saved_once_and_only_through_record_outcome():
     assert look("select count(*) from prereg.outcomes where issue_number = 9001")[0][0] == 1
 
 
+def test_a_provider_failure_puts_the_message_back_with_a_fresh_read_count():
+    with job() as t:
+        enqueue(t, 9109)
+        for _ in range(7):  # more failures than the 6-read limit: only the 24-hour expiry ends these retries
+            attempt = claim(t)[0]
+            t.execute("select prereg.record_failure(%s, %s)", [attempt, Jsonb(dict(STEP, error="APIStatusError 529"))])
+        assert t.execute("select prereg.recent_provider_failures()").fetchone()[0] >= 7
+        attempt, _, issue, _, read_ct, _ = claim(t)
+        assert (issue, read_ct) == (9109, 1)
+        t.execute("select prereg.record_failure(%s, %s)", [attempt, Jsonb(dict(STEP, error="APIStatusError 529"))])
+        t.execute("select prereg.record_failure(%s, %s)", [attempt, Jsonb(dict(STEP, error="APIStatusError 529"))])
+    assert look("select count(*) from pgmq.q_triage_events where message->>'issue_number' = '9109'")[0][0] == 1
+    with job() as t:  # finish it, so its message cannot come back into a later test
+        attempt, _, issue, _, _, _ = claim(t)
+        assert issue == 9109 and complete(t, attempt, "gone", step=dict(STEP, status="skipped")) == "done"
+
+
 def test_a_collation_chosen_by_the_caller_cannot_get_past_a_guard():
     with job() as t:
         t.execute("create collation pg_temp.same1 (provider = icu, locale = 'und', rules = '&polled = finished',"
@@ -140,7 +157,8 @@ def test_a_collation_chosen_by_the_caller_cannot_get_past_a_guard():
                   " deterministic = false)")
         assert denied(t, "select prereg.log_event('finished' collate pg_temp.same1, '{}')")
         enqueue(t, 9101)
-        attempt = claim(t)[0]
+        attempt, _, issue, _, _, _ = claim(t)
+        assert issue == 9101
         t.execute("select prereg.complete(%s, 'gone' collate pg_temp.same2, 'auth', false, 'h', %s)",
                   [attempt, Jsonb(dict(STEP, status="skipped"))])
     assert look("select count(*) from prereg.predictions where issue_number = 9101 and champion_id = 'haiku55-p0'"
@@ -154,7 +172,9 @@ def test_a_bad_message_is_a_dead_letter_and_does_not_block_the_next():
         a.execute("select pgmq.send('triage_events', '{\"issue_number\": 9102}')")  # no champion, never seen
     with job() as t:
         enqueue(t, 9103)
-        assert claim(t)[2] == 9103  # the same call skips the bad message
+        attempt, _, issue, _, _, _ = claim(t)
+        assert issue == 9103  # the same call skips the bad message
+        assert complete(t, attempt, "gone", step=dict(STEP, status="skipped")) == "done"
     assert look("select data->>'reason' from prereg.run_events where kind = 'dead_letter'"
                 " and data->>'issue_number' = '9102'") == [("malformed",)]
     with job() as t:
@@ -218,7 +238,8 @@ def test_complete_refuses_a_null_outcome_and_a_failed_step():
     with job() as t:
         enqueue(t, 9108)
         attempt = claim(t)[0]
-        for outcome, step in ((None, STEP), ("guessed", dict(STEP, status="error"))):
+        for outcome, step in ((None, STEP), ("guessed", dict(STEP, status="error")),
+                              ("guessed", dict(STEP, champion_id="another-champion"))):  # not the queued one
             try:
                 complete(t, attempt, outcome, "auth", False, step)
                 raise AssertionError(f"complete accepted {outcome!r} with step {step['status']}")
@@ -241,4 +262,5 @@ if __name__ == "__main__":
     for name, test in list(globals().items()):
         if name.startswith("test_"):
             test()
+            assert look("select count(*) from pgmq.q_triage_events")[0][0] == 0, f"{name} left a message behind"
             print("ok", name)
