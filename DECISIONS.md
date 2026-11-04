@@ -4,6 +4,7 @@ Newest first. Each entry says what was decided and why.
 
 ## 2026-11-04 (Day 0)
 
+- **No Google Cloud, no OpenRouter.** Supabase Postgres stays the only store: three Postgres views will give the weekly numbers, and the model watcher will test Anthropic models only. That means one cloud account, one card and two secrets fewer, and one more build day for the clock and the gate.
 - **CREATE ROLE must not give postgres rights.** On Postgres 16+, a role that a non-superuser creates is granted back to its creator, with INHERIT and SET if `createrole_self_grant` asks for them. `001_ledger.sql` sets that to empty for its own transaction. On a local Postgres 17 set to `set, inherit`, leaving the line out let postgres use triage_agent's rights without SET ROLE, and `db/check_roles.sql` caught it.
 - **Session pooler, not the direct host.** Free projects reach the direct host over IPv6 only, and GitHub's runners have no IPv6. triage_agent logged in through the session pooler (port 5432, user `triage_agent.<ref>`) on the first try, from the laptop and from a runner. Check 2 result: passed.
 - **Owner role.** The schema `prereg` belongs to `prereg_owner`, which cannot log in. `postgres` is a member with INHERIT FALSE, SET TRUE: it gets none of the owner's rights by default and must `SET ROLE prereg_owner` on purpose. Check 1 result: passed on Supabase (Postgres 17.11); all six rows of `db/check_roles.sql` are true.
