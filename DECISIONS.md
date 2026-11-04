@@ -15,7 +15,8 @@ Newest first. Each entry says what was decided and why.
 - **Config files are TOML**, which Python reads with no extra package. Workflow files stay YAML.
 - **Installs take wheels only** (`--only-binary :all:`), so installing never runs package code, in the job that holds the issues:write token too.
 - **Migration numbers:** `002` is the steps table, so the roles become `003`, the functions `004` and the cron jobs `005`.
-- **Check 4 result:** pending.
+- **Check 4 result: passed.** On 20 dev-set issues (created Sep 1-19), all 20 calls answered: no refusal, invalid answer or error. They averaged 1,465 input tokens (the most was 9,156) and 16 output tokens: $0.000155 per issue, or $0.016 per 100 issues. At about 2 new issues a day, the live job costs well under a cent a day, far below the $3 cap.
+- **The first Day 1 tick** gave champion guesses to the 3 Day 0 issues whose text was unchanged, and skipped the 1 that had been edited since the job first saw it.
 
 ## 2026-11-04 (Day 0)
 
