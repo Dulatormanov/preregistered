@@ -56,3 +56,5 @@ jobs:
         run: .venv/bin/python tests/test_tick.py
       - name: Kill test (kill -9 the worker mid-batch)
         run: .venv/bin/python tests/test_rollback.py
+      - name: Weekly report v0 (counts per day)
+        run: .venv/bin/python tests/test_weekly_report.py
