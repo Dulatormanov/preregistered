@@ -67,6 +67,8 @@ jobs:
           .venv/bin/python tests/test_gate.py
           .venv/bin/python tests/test_known_bad.py
           .venv/bin/python tests/test_collect.py
+          .venv/bin/python tests/test_tables.py
+          .venv/bin/python tests/test_judge.py
       - name: Migrations and check_roles.sql
         run: .venv/bin/python tests/setup_test_db.py
       - name: db/catalog.json matches the functions the migrations make
