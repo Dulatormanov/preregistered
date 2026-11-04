@@ -1,0 +1,29 @@
+# Taxonomy v0: the areas a guesser may choose for one issue. A change is a new version, never an edit.
+version = 0
+
+[[area]]
+name = "frontend"
+description = "Supabase Studio (the dashboard) and supabase.com: pages, the table editor, the SQL editor, buttons, forms and other UI problems."
+
+[[area]]
+name = "auth"
+description = "Supabase Auth: sign-up and log-in, OAuth and SSO providers, magic links, OTP, MFA, JWTs and sessions."
+
+[[area]]
+name = "postgres"
+description = "The Postgres database itself: SQL, RLS policies, extensions, triggers, functions, migrations, connections and performance."
+
+[[area]]
+name = "self-hosted"
+description = "Running Supabase on your own servers: Docker Compose, the self-hosting guide, and self-hosted services such as Kong."
+
+[[area]]
+name = "documentation"
+description = "The docs: a missing, wrong or unclear page, guide or code example, or a typo."
+
+[[area]]
+name = "other"
+description = "Anything else, for example Storage, Realtime, Edge Functions, the CLI or the client libraries."
+
+[needs_details]
+description = "true if a maintainer would most likely have to ask the reporter for more details before acting: steps to reproduce, versions, logs, or what they expected to happen."

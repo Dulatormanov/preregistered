@@ -1,0 +1,4 @@
+# Direct dependencies. requirements.txt pins these and their dependencies with hashes:
+#   uv pip compile requirements.in --generate-hashes --python-version 3.12 --python-platform x86_64-unknown-linux-gnu -o requirements.txt
+psycopg[binary]==3.3.7
+anthropic==2.4.0

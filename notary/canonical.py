@@ -12,14 +12,19 @@ Each hash is the lowercase hex SHA-256 of UTF-8 text.
   the first prev is GENESIS, 64 zeros.
 - An anchor is a comment by github-actions[bot] on the Notary log: text + " chain=" + chain(prev, text).
   Other comments are not anchors.
+- file_text(path, sha256, commit) = "canon=v1 kind=file file=<path> sha256=<hash of the file's bytes>
+  commit=<40-hex git commit>": one file of this repo, as it was at that commit. The path uses only
+  A-Z a-z 0-9 . _ - and /. Added on 2026-11-04, before the first file anchor; nothing above changes.
 """
 import hashlib
 import json
+import re
 from datetime import timezone
 
 CANON = "v1"
 GENESIS = "0" * 64
 FIELDS = ("id", "issue_number", "champion_id", "trial", "area", "needs_details", "input_sha256", "created_at")
+FILE_PATH = re.compile(r"[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*")
 
 
 def sha256(s):
@@ -46,3 +51,11 @@ def anchor_text(rows):
 
 def chain(prev, text):
     return sha256(prev + "\n" + text)
+
+
+def file_text(path, file_sha256, commit):
+    if not FILE_PATH.fullmatch(path) or ".." in path.split("/"):
+        raise ValueError("file anchors take a plain path inside the repo")
+    if not (re.fullmatch(r"[0-9a-f]{64}", file_sha256) and re.fullmatch(r"[0-9a-f]{40}", commit)):
+        raise ValueError("file anchors take a sha256 and a 40-hex commit")
+    return f"canon={CANON} kind=file file={path} sha256={file_sha256} commit={commit}"

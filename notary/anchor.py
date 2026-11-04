@@ -1,18 +1,21 @@
-"""Post the chain hash of every guess not yet anchored, on the pinned Notary log issue.
+"""Post the chain hash of every guess not yet anchored, and of a file if asked, on the pinned Notary log.
 
 This job holds an issues:write token for this repo (GitHub has no comment-only
 permission), so it runs nothing but this file.
 """
+import hashlib
 import json
 import os
 import re
+import subprocess
 import urllib.request
+from pathlib import Path
 from datetime import datetime, timezone
 
 import psycopg
 from psycopg.rows import dict_row
 
-from notary.canonical import FIELDS, GENESIS, anchor_text, chain
+from notary.canonical import FIELDS, FILE_PATH, GENESIS, anchor_text, chain, file_text
 
 LEDGER_START = datetime(2026, 11, 3, tzinfo=timezone.utc)  # the same day as START in runner/poll.py
 
@@ -40,6 +43,13 @@ def record(db, text, head, comment):
         [text, head, int(upto[1]) if upto else None, comment["id"], utc(comment["created_at"])])
 
 
+def post(db, prev, text):
+    head = chain(prev, text)
+    record(db, text, head, comments("POST", body={"body": f"{text} chain={head}"}))
+    db.commit()  # one record per comment: a crash loses at most the last one, and the next run heals it
+    return head
+
+
 def main():
     with psycopg.connect(os.environ["TRIAGE_DB_URL"], row_factory=dict_row) as db:
         last = db.execute(
@@ -49,21 +59,30 @@ def main():
         # connection). Record such comments first, so the public chain never forks or repeats.
         since = (last["comment_created_at"] if last else LEDGER_START).astimezone(timezone.utc)
         # note: one page of 100 comments; lock the issue if strangers ever flood it
+        healed = 0
         for c in comments("GET", f"?per_page=100&since={since:%Y-%m-%dT%H:%M:%SZ}"):
             text, _, head = (c.get("body") or "").rpartition(" chain=")
             if (c.get("user") or {}).get("login") == "github-actions[bot]" and head == chain(prev, text):
                 record(db, text, head, c)
                 prev = head
+                healed += 1
+        db.commit()
+        done = [f"healed={healed}"] if healed else []
         upto = db.execute("select coalesce(max(upto_prediction_id), 0) as n from prereg.anchors").fetchone()["n"]
         rows = db.execute(f"select {', '.join(FIELDS)} from prereg.predictions where id > %s order by id",
                           [upto]).fetchall()
-        if not rows:
-            print("anchor: nothing new")
-            return
-        text = anchor_text(rows)
-        head = chain(prev, text)
-        record(db, text, head, comments("POST", body={"body": f"{text} chain={head}"}))
-    print(f"anchored n={len(rows)} chain={head}")
+        if rows:
+            prev = post(db, prev, anchor_text(rows))
+            done.append(f"rows n={len(rows)}")
+        path = os.environ.get("ANCHOR_FILE", "").strip()
+        if path:  # workflow_dispatch input: a file of this repo, pinned at this run's commit
+            if not FILE_PATH.fullmatch(path):
+                raise SystemExit("ANCHOR_FILE must be a plain path inside the repo")
+            subprocess.run(["git", "ls-files", "--error-unmatch", "--", path], check=True, capture_output=True)
+            digest = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+            prev = post(db, prev, file_text(path, digest, os.environ["GITHUB_SHA"]))
+            done.append(f"file={path}")
+    print(f"anchored {' '.join(done)} chain={prev}" if done else "anchor: nothing new")
 
 
 if __name__ == "__main__":

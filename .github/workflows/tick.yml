@@ -9,11 +9,17 @@ on:
     - cron: "37 * * * *"
     - cron: "52 * * * *"
   workflow_dispatch:
+    inputs:
+      file:
+        description: Also anchor this file, by its path in the repo (for example PREREGISTRATION.md)
+        required: false
+        default: ""
 
 # One tick at a time: the ledger has one writer, so guesses get ids in one order.
 concurrency:
   group: tick
   cancel-in-progress: false
+  queue: max  # a waiting run (a file anchor too) is never replaced by the next one
 
 permissions: {}
 
@@ -25,26 +31,32 @@ jobs:
       contents: read  # checkout only: no GitHub write rights
     outputs:
       pending: ${{ steps.poll.outputs.pending }}
+      anchor: ${{ steps.poll.outputs.anchor }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - run: python3 -m venv .venv && .venv/bin/pip install -q --require-hashes -r requirements.txt
+      - run: |  # wheels only, so installing runs no package code
+          python3 -m venv .venv
+          .venv/bin/pip install -q --require-hashes --only-binary :all: -r requirements.txt
       - id: poll
         run: .venv/bin/python -m runner.poll
         env:
           TRIAGE_DB_URL: ${{ secrets.TRIAGE_DB_URL }}
           PREREG_READ_TOKEN: ${{ secrets.PREREG_READ_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}  # the poll job only; the anchor job never gets it
           SCHEDULE: ${{ github.event.schedule }}
+          ANCHOR_FILE: ${{ inputs.file }}
       - name: Healthchecks ping (nothing to anchor)
-        if: steps.poll.outputs.pending == '0'
+        if: steps.poll.outputs.anchor == 'no'
         run: curl -fsS -m 10 --retry 3 -o /dev/null "$HC_TICK_URL"
         env:
           HC_TICK_URL: ${{ secrets.HC_TICK_URL }}
 
   anchor:
     needs: poll
-    if: needs.poll.outputs.pending != '0'
+    # Runs after a failed poll too: guesses saved before a failure still get their anchor.
+    if: ${{ !cancelled() && needs.poll.outputs.anchor != 'no' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -54,13 +66,17 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - run: python3 -m venv .venv && .venv/bin/pip install -q --require-hashes -r requirements.txt
+      - run: |  # wheels only, so installing runs no package code
+          python3 -m venv .venv
+          .venv/bin/pip install -q --require-hashes --only-binary :all: -r requirements.txt
       - run: .venv/bin/python -m notary.anchor
         env:
           TRIAGE_DB_URL: ${{ secrets.TRIAGE_DB_URL }}
           GH_TOKEN: ${{ github.token }}
           NOTARY_ISSUE: ${{ vars.NOTARY_ISSUE }}
+          ANCHOR_FILE: ${{ inputs.file }}
       - name: Healthchecks ping
+        if: needs.poll.result == 'success'  # a failed poll must still raise the alarm
         run: curl -fsS -m 10 --retry 3 -o /dev/null "$HC_TICK_URL"
         env:
           HC_TICK_URL: ${{ secrets.HC_TICK_URL }}

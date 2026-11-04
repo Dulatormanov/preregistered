@@ -1,0 +1,17 @@
+# models.lock: pins what makes a guess. Every job reads this file; change it only by pull request.
+# A champion id names one exact setup. A change of model, settings, prompt or taxonomy, or of how
+# agents/champion.py writes the user turn, is a new id, never an edit of this one.
+
+[champion]
+id = "haiku55-p0"
+model = "claude-haiku-5-5"
+effort = "low"
+thinking = "disabled"
+max_tokens = 200
+prompt = "prompts/triage_v0.md"
+prompt_sha256 = "272d6ae797e70843fd60e4d91d5040ae078eb66896c2ef06a085c63d01944d58"
+taxonomy = "taxonomy.toml"
+taxonomy_sha256 = "b6e04dd3eccab1813fea2fc16dbe915fa981a0816fbcf607251c1e1380fc2c26"
+
+[baseline]
+id = "rules_v0"  # agents/rules_v0.py, frozen: it guesses next to the champion as the free floor

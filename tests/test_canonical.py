@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from agents import rules_v0  # noqa: E402
-from notary.canonical import GENESIS, anchor_text, chain, content_sha256, row_text  # noqa: E402
+from notary.canonical import GENESIS, anchor_text, chain, content_sha256, file_text, row_text, sha256  # noqa: E402
 
 ROW = {"id": 1, "issue_number": 12345, "champion_id": "rules_v0", "trial": 1, "area": "auth",
        "needs_details": False, "input_sha256": content_sha256("Magic link login fails", "Steps: ..."),
@@ -37,6 +37,19 @@ def test_two_rows_and_a_second_link_are_frozen():
     second = anchor_text([ROW2])
     assert second == "canon=v1 kind=rows upto=2 n=1 rows=1527a8a0ad0c7c30f83dc816c41078f68c57d0763bae52afad4bf1c20e9cf515"
     assert chain(first, second) == "7d55649d93534aa1965f1fb827f940877c5ceef622bf630b1e74d67f773431ea"
+
+
+def test_file_anchor_is_frozen():
+    text = file_text("PREREGISTRATION.md", sha256("x"), "a" * 40)
+    assert text == ("canon=v1 kind=file file=PREREGISTRATION.md"
+                    " sha256=2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881 commit=" + "a" * 40)
+    assert chain(GENESIS, text) == "b5c4608604e77641b30ac473547d28b2403304db34b5d8befa1aca2c762fab9c"
+    for bad in ("../x", "x/../y", "/etc/passwd", "a b.md", ""):
+        try:
+            file_text(bad, sha256("x"), "a" * 40)
+            raise AssertionError(f"accepted {bad!r}")
+        except ValueError:
+            pass
 
 
 def test_times_are_utc():

@@ -1,0 +1,8 @@
+# USD per million tokens, from the Claude pricing docs, checked on 2026-11-04.
+# These are the prices for prompts of 100K tokens or fewer; agents/champion.py keeps every prompt far below that.
+
+["claude-haiku-5-5"]
+input = 0.10
+output = 0.50
+cache_write = 0.125  # 1.25 x input
+cache_read = 0.01  # 0.1 x input

@@ -58,7 +58,7 @@ create table prereg.run_events (
 reset role;
 
 -- Day 0 login role: it can add rows, never change them, and never set id or created_at.
--- note: temporary; 002_roles.sql takes it over on Day 2.
+-- note: temporary; 003_roles.sql takes it over on Day 2.
 create role triage_agent login;  -- password: scripts/role_password.py, never typed into SQL
 
 set role prereg_owner;
