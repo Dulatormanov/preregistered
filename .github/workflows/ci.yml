@@ -43,6 +43,7 @@ jobs:
           .venv/bin/python tests/test_canonical.py
           .venv/bin/python tests/test_champion.py
           .venv/bin/python tests/test_lint_refs.py
+          .venv/bin/python tests/test_probe.py
       - name: Migrations and check_roles.sql
         run: .venv/bin/python tests/setup_test_db.py
       - name: Queue functions (dead letters, temp-table hijack, repeats)

@@ -2,6 +2,17 @@
 
 Newest first. Each entry says what was decided and why.
 
+## 2026-11-05 (Day 6, started early)
+
+- **The sandbox** is the public repo `Dulatormanov/prereg-sandbox`. It has the six area labels plus `needs-details`, `probe-label` and `probe-side-door`, one probe issue, the 20 prompt-injection fixtures (each with a clearly fake canary), and `side_door_demo.yml`, which closes any issue that gets `probe-side-door`.
+- **The human gate** is the environment `sandbox-write`: the owner is the required reviewer, prevent self-review is on, admins cannot bypass it, and only `main` may deploy. The write token will be its only secret.
+- **The bot dispatcher.** `dispatch.yml` holds no secret and only `actions: write`. It starts `probe.yml`, so the probe run's triggering actor is the bot, and the owner can approve it.
+- **The Day 6 review** confirmed 2 findings, both fixed before the first probe:
+  - Any failed request counted as DENIED, so a dead read token (401) or a GitHub error would pass. Now DENIED means GitHub's own refusal (403, "Resource not accessible"), and anything else is ERROR.
+  - A write token saved as a repository secret by mistake (`gh secret set` without `--env`) would pass every probe, while any run could read it. The probe's first job runs outside the environment and fails if the token reaches it.
+- **What the gate does not stop:** the owner's own login, including the laptop's `gh` token, can approve. CREDENTIALS.md says so, and that a coding agent must never approve: a rule, not a structure.
+- **Waiting for the owner:** the write token itself, the first approval (Check 13), and the browser checks for installed apps and linked Projects.
+
 ## 2026-11-05 (Day 5)
 
 - **The worker** (`runner/worker.py`) guesses queued issues, one message at a time. It runs inside each tick, so `tick.yml` does not change: changing that file costs an hour or more of schedule.

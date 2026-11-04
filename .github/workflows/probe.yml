@@ -26,6 +26,9 @@ jobs:
       - run: python3 probes/probe.py read
         env:
           PREREG_READ_TOKEN: ${{ secrets.PREREG_READ_TOKEN }}
+          # A control: outside the environment this must be empty. If the write token were saved as a repository
+          # secret by mistake, any run on any branch could read it, and this job fails.
+          PREREG_SANDBOX_WRITE: ${{ secrets.PREREG_SANDBOX_WRITE }}
 
   write-token:
     needs: read-token
