@@ -9,7 +9,9 @@ Newest first. Each entry says what was decided and why.
 - **Autocommit.** Neither job keeps a transaction open over the network. Writes that belong together share one short transaction. A tick's first sights are all or nothing, because the next cutoff comes from the newest one.
 - **Two layers of checks.** `db/check_roles.sql` reads the catalog: 9 checks, for every role and every kind of right (column UPDATE, TRIGGER, views, column SELECT). `tests/test_db_grants.py` tries 187 forbidden actions as each job role. Each attempt touches zero rows, so even one that is wrongly allowed changes nothing and uses no id. The Day 2 review found 6 gaps in the first version, and each one now turns a check red.
 - **`credentials.toml`** lists every secret, with what it can do, what it must never do, and when it expires.
-- **Check 9 result:** pending. The poll job saves GitHub's token-expiry header in each 'polled' event.
+- **Check 9 result: passed.** GitHub sends the read token's expiry header, and the poll job saves it in each 'polled' event: `prereg-read` expires on 2027-02-01 19:00 UTC.
+- **The grant test passed on prereg-prod:** all 187 forbidden attempts were denied with 42501, and all 9 catalog checks are true.
+- **The schedule started** at 18:32 UTC, after GitHub's incident ended. Before that, no scheduled run came at all.
 
 ## 2026-11-04 (Day 1, started a day early)
 
