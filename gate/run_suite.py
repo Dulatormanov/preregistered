@@ -13,6 +13,7 @@ import argparse
 import hashlib
 import json
 import os
+import time
 import urllib.error
 from concurrent.futures import ThreadPoolExecutor
 
@@ -26,7 +27,7 @@ from notary.canonical import content_sha256
 from runner.poll import UPSTREAM, github
 
 THREADS = 8
-RETRIES = 2  # an API error gets 2 more tries before the trial is recorded as an error, which is not scored
+WAITS = (5, 20)  # seconds before each retry of an API error; after them the trial is an error, which is not scored
 
 
 def sha256(text):
@@ -57,13 +58,14 @@ def load(evals, token, pool):
     return out, skipped
 
 
-def trial(db, cfg, client, name, case, score):
-    for _ in range(RETRIES + 1):
+def trial(db, cfg, client, name, case, score, waits=WAITS):
+    for wait in (*waits, None):
         text, h, step = models.answer_raw(db, "gate", cfg, client, case["title"], case["body"])
         db.execute("select prereg.record_gate_step('gate', %s, %s)",
                    [int(case["id"]) if case["id"].isdigit() else None, Jsonb(step)])
-        if step["status"] != "error":
+        if step["status"] != "error" or wait is None:
             break
+        time.sleep(wait)
     guarded = text if text is not None and not guards.check(text, cfg["areas"]) else None
     passed, code = score(guarded, case)
     raw_passed, raw_code = score(text, case)
@@ -117,8 +119,8 @@ def main():
             n, t, name, case = job
             return {"run": n, "trial": t, **trial(db, cfg, client, name, case, scores[name])}
 
-        jobs = [(n, t, name, case) for n in range(1, a.runs + 1) for name, case in cases
-                for t in range(1, m["trials"] + 1)]
+        jobs = [(n, t, name, case) for n in range(1, a.runs + 1) for t in range(1, m["trials"] + 1)
+                for name, case in cases]  # trial by trial, so a short API outage cannot take all trials of a case
         rows = list(pool.map(run, jobs))
         if a.baseline:
             with open(a.baseline) as f:

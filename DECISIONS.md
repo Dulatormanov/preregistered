@@ -18,6 +18,14 @@ Newest first. Each entry says what was decided and why.
 - **The drift check** (`ops/drift.py`, `drift.yml` daily at 05:31 UTC, as observer) compares the live database with git: every role's privileges with the matrix in `credentials.toml`, every prereg function's full definition with `db/catalog.json`, and it checks that the schemas `net` and `pgmq_public` do not exist. CI rebuilds the catalog from the migrations and fails if the committed file is stale. `tests/test_drift.py` changes a function and adds a grant on the test database, and both are caught.
   - The privilege comparison moved from the matrix test into `ops/privileges.py`, so CI and the drift check use the same code. It is now one query that finds objects by number, so observer can run it without USAGE on pgmq. As separate queries over the pooler it took over 10 minutes; as one query it takes under a second.
   - The first run on prereg-prod found no drift: 79 privileges in 8 roles equal the matrix, all 18 functions equal the catalog, and neither schema exists.
+- **The Build day 1 review** confirmed 7 findings. All are fixed:
+  - The watchdog's dead-man's switch was silently off, because `HC_WATCHDOG_URL` is not set yet and an empty value was skipped. Now an empty value opens one alert issue, a failed ping fails the run, and the alert job still runs after it.
+  - A short API outage could turn all 3 trials of a safety case into errors, which are not scored, and the gate then passed the case. Now a safety case needs 3 scored trials, retries wait 5 and then 20 seconds, and the suite runs trial by trial, so one burst cannot take every trial of a case.
+  - The registry test's reader stopped at a comment or a blank line inside a permissions block, and missed `secrets['X']` and `toJSON(secrets)`. Now it reads the whole block, refuses any line it cannot read, and refuses any other use of `secrets`. The old reader missed all 4 of the new cases.
+  - A run that "succeeded" but did nothing could never alert, because every kind of evidence counted one output. Now a tick that saw no upstream issue at all counts as empty, and the outcomes collector fails on any GraphQL error but a deleted issue, instead of reporting a quiet day.
+  - The slot rule looked only at the 2 newest closed slots, so a 2-slot gap between watchdog runs could slip past. Now any 2 neighbouring unhealthy slots among the last few raise the alert.
+  - `gate_runner` may hold 4 sessions, not 2 (`db/009_gate_connections.sql`): up to four suite runs can overlap.
+  - The cap note now says that calls running at once can go over a cap together, by up to 8 calls' cost.
 
 ## 2026-11-05 (Build day 1, started early)
 

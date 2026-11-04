@@ -7,6 +7,7 @@ job, or a permissions line it cannot read, fails the test. Each rule is then sho
 """
 import copy
 import re
+import tempfile
 import tomllib
 from pathlib import Path
 
@@ -37,10 +38,14 @@ def workflow_jobs(path):
                 inline = line.split(":", 1)[1].split("#")[0].strip()
                 assert re.match(r"^    permissions:", line) and inline in ("", "{}"), f"{path.name}/{job}: {line.strip()}"
                 for following in body[i + 1:]:
-                    m = re.match(r"^      ([a-z-]+): (read|write)\b", following)
-                    if not m:
-                        break
-                    permissions.add(f"{m.group(1)}: {m.group(2)}")
+                    if not following.strip() or following.strip().startswith("#"):
+                        continue  # a blank or comment line inside the block
+                    if not following.startswith("     "):
+                        break  # the block ends at the next key of the job
+                    m = re.match(r"""^      ([a-z-]+):\s*['"]?(read|write|none)['"]?\s*(#.*)?$""", following)
+                    assert m, f"{path.name}/{job}: a permissions line the reader cannot read: {following.strip()}"
+                    if m.group(2) != "none":
+                        permissions.add(f"{m.group(1)}: {m.group(2)}")
             m = re.match(r"^    environment:\s*([\w-]+)", line)
             if m:
                 environment = m.group(1)
@@ -48,6 +53,8 @@ def workflow_jobs(path):
                      "permissions": permissions, "environment": environment}
     in_jobs = sum(len(re.findall(r"secrets\.", "\n".join(b))) for b in bodies.values())
     assert in_jobs == len(re.findall(r"secrets\.", text)), f"{path.name}: a secret is used outside a job"
+    for expression in re.findall(r"\$\{\{(.*?)\}\}", text):  # secrets['X'] or toJSON(secrets) would hide a secret
+        assert not re.search(r"\bsecrets\b(?!\.[A-Za-z0-9_]+)", expression), f"{path.name}: {expression.strip()}"
     return jobs
 
 
@@ -108,7 +115,39 @@ def main():
     reg["job"].append({"id": "x/y", "owner": "o", "tier": "read", "autonomy": "read_report", "suite": "ci",
                        "secrets": ["ANTHROPIC_API_KEY"], "permissions": ["issues: write"]})
     assert any("model key and a write" in p for p in problems(with_both, reg))
-    print(f"ok: all {len(found)} workflow jobs match the registry, and each rule fires on a broken copy")
+    tick = (ROOT / ".github/workflows/tick.yml").read_text()
+    for bad in ("      contents: read\n      # also needed\n      issues: write",  # a grant after a comment
+                "      contents: read\n\n      issues: write",  # after a blank line
+                '      issues: "write"',  # quoted
+                "        issues: write"):  # indented deeper
+        broken_tick = tick.replace("      contents: read  # checkout only", bad + "  #", 1)
+        assert reads_or_refuses(broken_tick, "issues: write"), f"the reader missed the grant in {bad!r}"
+    for hidden in ("${{ secrets['PREREG_SANDBOX_WRITE'] }}", "${{ toJSON(secrets) }}"):
+        assert refuses(tick + f"# {hidden}\n"), f"the reader missed {hidden}"
+    print(f"ok: all {len(found)} workflow jobs match the registry, each rule fires on a broken copy, and the reader"
+          " fails closed")
+
+
+def reads_or_refuses(text, grant):
+    """True if the reader finds the poll job's grant, or refuses the file: either way nothing slips through."""
+    try:
+        return grant in workflow_jobs(write_tmp(text))["poll"]["permissions"]
+    except AssertionError:
+        return True
+
+
+def refuses(text):
+    try:
+        workflow_jobs(write_tmp(text))
+        return False
+    except AssertionError:
+        return True
+
+
+def write_tmp(text):
+    f = Path(tempfile.mkdtemp()) / "x.yml"
+    f.write_text(text)
+    return f
 
 
 if __name__ == "__main__":

@@ -39,7 +39,7 @@ jobs:
 
   alert:
     needs: check
-    if: needs.check.outputs.alerts != '{}' && needs.check.outputs.alerts != ''
+    if: "!cancelled() && needs.check.outputs.alerts != '{}' && needs.check.outputs.alerts != ''"  # also after a failed ping
     runs-on: ubuntu-24.04
     timeout-minutes: 3
     permissions:

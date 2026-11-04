@@ -39,11 +39,11 @@ def fake_gh(fail_upstream=False):
     return gh
 
 
-def polled(t, slot):
+def polled(t, slot, saw_upstream=True):
     t.execute("select prereg.log_event('polled', %s)", [Jsonb({
         "trigger": "schedule", "planned_start": slot.isoformat(), "actual_start": (slot + timedelta(minutes=9)).isoformat(),
         "http_status": 200, "lost": 0, "token_expires": f"{NOW + timedelta(days=3):%Y-%m-%d %H:%M:%S} UTC",
-        "champion": {"guessed": 1, "errors": 0}})])
+        "champion": {"guessed": 1, "errors": 0}, **({"newest_upstream": 777003} if saw_upstream else {})})])
 
 
 def main():
@@ -72,14 +72,21 @@ def main():
     assert want <= alerts.keys(), sorted(alerts)
     assert "777001" not in str(alerts) and "9901" not in str(alerts)  # alert texts hold counts, never numbers
 
-    with psycopg.connect(role_url("triage_agent"), autocommit=True) as t:  # the 2 last closed slots get ticks
+    with psycopg.connect(role_url("triage_agent"), autocommit=True) as t:  # every slot the rule looks at gets a tick
         last = watchdog.slot_of(TICK, NOW - timedelta(minutes=45))
-        polled(t, last)
-        polled(t, last - timedelta(minutes=15))
+        for i in range(watchdog.lookback(TICK) + 1):
+            polled(t, last - timedelta(minutes=15 * i))
     watchdog.gh = fake_gh(fail_upstream=True)
     with psycopg.connect(role_url("observer"), autocommit=True) as o:
         alerts = watchdog.check(o, "token", NOW)
     assert "missed:tick/poll" not in alerts and "upstream_read" in alerts and "upstream_missing" not in alerts, alerts
+    silent = [(last - timedelta(minutes=15 * i), last - timedelta(minutes=15 * i - 9), True, 0) for i in range(8)]
+    assert watchdog.slot_alert(TICK, silent, NOW)  # ticks that "succeeded" but saw no upstream issue did nothing
+    def ticks(missing):  # a healthy tick in each of the last 8 slots, except the missing ones
+        slots = [last - timedelta(minutes=15 * i) for i in range(8) if i not in missing]
+        return [(slot, slot + timedelta(minutes=9), True, 1) for slot in slots]
+    assert not watchdog.slot_alert(TICK, ticks({2}), NOW)  # one missed slot is not an alert
+    assert watchdog.slot_alert(TICK, ticks({2, 3}), NOW)  # two in a row are, even behind the newest slot
     young = dict(TICK, first_slot=(NOW - timedelta(minutes=50)).isoformat())  # a job too new for 2 closed slots
     assert watchdog.slot_alert(young, [], NOW) is False and watchdog.slot_alert(TICK, [], NOW) is True
     print(f"ok: the watchdog raises each of its {len(want) + 1} alert types, and none for a healthy tick slot")

@@ -36,9 +36,9 @@ select check_name, ok from (values
    not exists (select from adders)),
   ('7. observer can read every table',
    not exists (select from t where not has_table_privilege('observer', t.oid, 'SELECT'))),
-  ('8. each job role: NOINHERIT, at most 2 connections, 30-second statement and idle timeouts, no override',
+  ('8. each job role: NOINHERIT, at most 2 connections (4 for gate_runner), 30-second statement and idle timeouts, no override',
    (select count(*) from pg_roles x join job using (oid)
-    where not x.rolinherit and x.rolconnlimit = 2
+    where not x.rolinherit and x.rolconnlimit = case x.rolname when 'gate_runner' then 4 else 2 end
       and x.rolconfig @> array['statement_timeout=30s', 'idle_in_transaction_session_timeout=30s']) = (select count(*) from job)
    and not exists (select from pg_db_role_setting s join job on s.setrole = job.oid where s.setdatabase <> 0)),
   ('9. no job role is a member of any role, so none can SET ROLE to borrow rights',

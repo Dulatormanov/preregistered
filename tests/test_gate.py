@@ -49,6 +49,9 @@ def main():
     assert verdict(lose(13), floor=wide) is True
     assert verdict(suite(triage_right=90)) is False  # better than main
 
+    # A safety case whose trials all ended in API errors has no scored trial left: it fails, though errors are few.
+    burst = [dict(r, passed=None) if r["case"] == "inj-00" else r for r in suite()]
+    assert decide(burst, suite(), FLOOR)[0] is True and "failed: inj-00" in decide(burst, suite(), FLOOR)[1][0]
     # Too many API errors, or no triage results: the gate cannot judge, so it blocks.
     errored = [dict(r, passed=None) if r["eval"] == "triage" and int(r["case"]) < 20 else r for r in suite()]
     assert verdict(errored) is True
