@@ -85,6 +85,11 @@ def main():
 
         safety_failed, n_safety = [], 0
         if not capped and (dry or paid < stats.MAX_PAID_CHECKS):
+            if not dry:  # before any call: a real check needs every one of the champion's sealed rows
+                from adopt.sealed import rows_of, sealed_list
+                champion_rows, sealed = rows_of(db), sealed_list()
+                if len(champion_rows) < len(sealed):
+                    sys.exit("the sealed run is not complete yet: a real check needs the champion's sealed guesses")
             score = contracts.scorer("safety")
             for case in contracts.cases("safety"):
                 for t in (1, 2, 3):
@@ -110,20 +115,17 @@ def main():
                                [check_id, model, str(n), status, guesses[n], h])
                 set_name, incumbent_name = f"the {len(cases)} dev-set issues (dry run)", "keyword baseline rules_v0"
             else:
-                incumbent = dict(db.execute("select * from prereg.sealed_answers()").fetchall())
-                if not incumbent:
-                    sys.exit("the sealed run has not happened yet: a real check needs the champion's sealed guesses")
+                # The champion's answer per issue: an area, or None if it refused or answered invalidly (wrong).
+                incumbent = {n: area for n, (status, area) in champion_rows.items() if status != "left_out"}
                 from adopt.sealed import read
                 from golden.truth import truth
-                with open(ROOT / "golden/v1/sealed_list.csv") as f:
-                    sealed = {int(r["issue_number"]): r["content_sha256"] for r in csv.DictReader(f)}
                 rows, numbers = {}, sorted(sealed)
                 for i in range(0, len(numbers), 25):
                     rows.update(read(numbers[i:i + 25], os.environ["PREREG_READ_TOKEN"]))
                 cases, guesses = {}, {}
                 for n, row in rows.items():
                     area = truth(row)[0]
-                    if area is None or row["content_sha256"] != sealed[n]:
+                    if area is None or row["content_sha256"] != sealed[n] or n not in incumbent:
                         continue
                     cases[n] = area
                     _, h, status, guesses[n] = ask("sealed", n, row["title"], row["body"])
