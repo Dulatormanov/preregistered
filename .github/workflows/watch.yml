@@ -1,0 +1,107 @@
+name: watch
+
+# The model watcher (adopt/watch.py, adopt/check.py, PREREGISTRATION.md v1), every hour at :41. It records every new
+# model in Anthropic's list, checks one new Claude model against the champion, and opens a verdict pull request.
+# Started by hand, it can check a named model at once, or make a dry run (the champion's own model against rules_v0
+# on the dev set). GitHub starts no checks for a pull request that GITHUB_TOKEN opened: close and reopen it to run them.
+on:
+  schedule:
+    - cron: "41 * * * *"
+  workflow_dispatch:
+    inputs:
+      model:
+        description: Check this model now (empty = only the new ones)
+        type: string
+        default: ""
+      dry_run:
+        description: A dry run (the dev set, against rules_v0; not a paid check)
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: adopt  # ADOPTER_DB_URL lives here, and only main may use it
+    permissions:
+      contents: read
+    outputs:
+      model: ${{ steps.watch.outputs.model }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - run: |  # wheels only, so installing runs no package code
+          python3 -m venv .venv
+          .venv/bin/pip install -q --require-hashes --only-binary :all: -r requirements.txt
+      - id: watch
+        run: .venv/bin/python -m adopt.watch
+        env:
+          ADOPTER_DB_URL: ${{ secrets.ADOPTER_DB_URL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}  # the model list
+          INPUT_MODEL: ${{ inputs.model }}
+
+  check:
+    needs: watch
+    if: needs.watch.outputs.model != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment: adopt
+    permissions:
+      contents: read  # a model key and no write right (the registry rule)
+    outputs:
+      check_id: ${{ steps.check.outputs.check_id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - run: |  # wheels only, so installing runs no package code
+          python3 -m venv .venv
+          .venv/bin/pip install -q --require-hashes --only-binary :all: -r requirements.txt
+      - id: check
+        run: .venv/bin/python -m adopt.check "$MODEL" ${{ inputs.dry_run && '--dry-run' || '' }}
+        env:
+          MODEL: ${{ needs.watch.outputs.model }}
+          ADOPTER_DB_URL: ${{ secrets.ADOPTER_DB_URL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PREREG_READ_TOKEN: ${{ secrets.PREREG_READ_TOKEN }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: verdict
+          path: results/verdicts/
+          retention-days: 90
+
+  open-pr:
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write  # one new branch; main itself is protected by the ruleset
+      pull-requests: write  # one verdict pull request; this job holds no model key and no database login
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: verdict
+          path: results/verdicts
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          CHECK_ID: ${{ needs.check.outputs.check_id }}
+        run: |
+          python3 scripts/lint_refs.py results/verdicts/*.md  # every posted text passes the reference lint
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "verdict-$CHECK_ID"
+          git add results/verdicts
+          git commit -q -m "Model check $CHECK_ID: the verdict"
+          git push -q "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPO}.git" "verdict-$CHECK_ID"
+          gh pr create --head "verdict-$CHECK_ID" --title "Model check $CHECK_ID" --body-file "results/verdicts/$CHECK_ID.md"

@@ -51,9 +51,10 @@ select check_name, ok from (values
              from pg_proc f, r where f.pronamespace = 'prereg'::regnamespace
              and has_function_privilege(r.oid, f.oid, 'EXECUTE')) x), '{}')
    = coalesce((select array_agg(e order by e) from unnest(array[
-        'claim_next:triage_agent', 'complete:triage_agent', 'paid_checks:adopter', 'record_challenger_guess:adopter',
+        'claim_next:triage_agent', 'complete:triage_agent', 'model_first_seen:adopter', 'models_seen_count:adopter',
+        'paid_checks:adopter', 'record_challenger_guess:adopter',
         'record_gate_step:adopter', 'record_model_seen:adopter', 'record_sealed_guess:adopter', 'record_verdict:adopter',
-        'sealed_count:adopter', 'spend_today:adopter', 'spend_total:adopter', 'enqueue_issue:triage_agent', 'log_event:triage_agent',
+        'sealed_answers:adopter', 'sealed_count:adopter', 'spend_today:adopter', 'spend_total:adopter', 'enqueue_issue:triage_agent', 'log_event:triage_agent',
         'losses_since:triage_agent', 'newest_first_sight:triage_agent', 'queue_health:observer',
         'recent_provider_failures:triage_agent', 'record_anchor:notary', 'record_failure:triage_agent',
         'record_gate_step:gate_runner', 'record_outcome:collector', 'record_probe:triage_agent',

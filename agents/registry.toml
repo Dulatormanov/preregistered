@@ -262,3 +262,37 @@ autonomy = "read_report"
 suite = "ci"
 secrets = []
 permissions = ["contents: write", "pull-requests: write"]
+
+[[job]]
+id = "watch/watch"  # the model list, hourly; its first run only records it
+owner = "Dulatormanov"
+tier = "ledger"
+autonomy = "read_report"
+suite = "ci"
+secrets = ["ADOPTER_DB_URL", "ANTHROPIC_API_KEY"]
+permissions = ["contents: read"]
+environment = "adopt"
+cadence_min = 60
+at_minute = 41
+grace_min = 90
+evidence = "run:watch.yml"
+first_slot = "2026-11-05T06:41:00+00:00"  # the first slot this job could fill
+
+[[job]]
+id = "watch/check"  # one model check: a model key, the adopt login, and no write right
+owner = "Dulatormanov"
+tier = "ledger"
+autonomy = "read_report"
+suite = "triage"
+secrets = ["ADOPTER_DB_URL", "ANTHROPIC_API_KEY", "PREREG_READ_TOKEN"]
+permissions = ["contents: read"]
+environment = "adopt"
+
+[[job]]
+id = "watch/open-pr"  # the verdict pull request: a write right, and no model key and no database login
+owner = "Dulatormanov"
+tier = "public_write"
+autonomy = "read_report"
+suite = "ci"
+secrets = []
+permissions = ["contents: write", "pull-requests: write"]
