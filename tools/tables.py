@@ -89,6 +89,15 @@ def live(db):
     return series, rows
 
 
+def window_so_far(db):
+    """[(series, counting guesses, right, scorable)] in the live window so far, under the pre-registered rule.
+    The README and the weekly report use it, so their numbers are the ones this table gives. Empty while no
+    window issue is scorable."""
+    series, rows = live(db)
+    return [(name, have, right, scorable) for name, (scorable, have, right) in
+            ((name, score(gs, rows, RULES)) for name, gs in series.items()) if scorable]
+
+
 def main():
     import psycopg
     results = sys.argv[1] if len(sys.argv) > 1 else None

@@ -6,10 +6,12 @@ For every anchor, in order:
 - it is a comment on issue 1 by the github-actions bot (GraphQL author: Bot github-actions), never edited, and its
   text and chain equal the published anchor;
 - its chain links to the anchor before it (the first to GENESIS);
-- a rows anchor recomputes from the revealed rows it covers; if they are not all revealed yet (under 14 days old),
-  it is "waiting", which is not a failure;
+- a rows anchor recomputes from the revealed rows in its id range: exactly n= of them, so an id the database
+  skipped is not a gap. If fewer are revealed while the anchor is under 16 days old (the reveal publishes rows
+  14 days old, daily, and may miss a run), it is "waiting", which is not a failure; after that it is a problem;
 - a file anchor matches the file in git at its commit.
-No anchor may be missing: the published list and the bot's comments must be the same, one for one.
+No anchor may be missing: the published list and the bot's comments must be the same, one for one. No revealed
+row may repeat an id, or lie outside every rows anchor's range.
 """
 import hashlib
 import json
@@ -17,11 +19,14 @@ import os
 import subprocess
 import sys
 import urllib.request
+from collections import Counter
+from datetime import datetime, timezone
 from pathlib import Path
 
 from notary.canonical import GENESIS, chain, file_text, sha256
 
 ROOT = Path(__file__).resolve().parents[1]
+REVEAL_DAYS = 16  # every row of an anchor is revealed by then
 QUERY = """query($cursor: String) { repository(owner: "Dulatormanov", name: "preregistered") { issue(number: 1) {
   comments(first: 100, after: $cursor) { pageInfo { hasNextPage endCursor }
     nodes { databaseId body createdAt lastEditedAt author { __typename login } } } } } }"""
@@ -46,12 +51,15 @@ def git_file(commit, path):
     return subprocess.run(["git", "-C", str(ROOT), "show", f"{commit}:{path}"], capture_output=True, check=True).stdout
 
 
-def verify(lines, anchors, comments, git_show=git_file):
+def verify(lines, anchors, comments, git_show=git_file, now=None):
     """(problems, report lines). lines: the revealed row texts; anchors: the published anchor rows."""
-    rows = {json.loads(line)["id"]: line for line in lines}
+    now = now or datetime.now(timezone.utc)
+    ids = [json.loads(line)["id"] for line in lines]
+    rows = dict(zip(ids, lines))
     bot = [c for c in comments if (c.get("author") or {}).get("__typename") == "Bot"
            and c["author"]["login"] == "github-actions"]
     problems, report, prev, low = [], [], GENESIS, 0
+    problems += [f"guess {i} is revealed {k} times" for i, k in sorted(Counter(ids).items()) if k > 1]
     if [a["comment_id"] for a in anchors] != [c["databaseId"] for c in bot]:
         problems.append(f"{len(anchors)} published anchors, but {len(bot)} anchor comments by the bot")
     for a, c in zip(anchors, bot):
@@ -61,14 +69,16 @@ def verify(lines, anchors, comments, git_show=git_file):
         if (text, head) != (a["text"], a["chain_hash"]) or head != chain(prev, text):
             problems.append(f"anchor {a['id']}: its text or chain does not match, or does not link to the one before")
         if " kind=rows " in f" {text} ":
-            upto = int(text.split(" upto=")[1].split()[0])
-            covered = [rows.get(i) for i in range(low + 1, upto + 1)]
-            if None in covered:
+            upto, n = (int(text.split(f" {k}=")[1].split()[0]) for k in ("upto", "n"))
+            covered = [rows[i] for i in sorted(rows) if low < i <= upto]
+            age = (now - datetime.fromisoformat(c["createdAt"].replace("Z", "+00:00"))).days
+            if len(covered) == n and text.split(" rows=")[1] == sha256("\n".join(covered)):
+                report.append(f"anchor {a['id']}: its {n} guesses, ids {low + 1} to {upto}, recompute")
+            elif len(covered) < n and age < REVEAL_DAYS:
                 report.append(f"anchor {a['id']}: waiting for the reveal of guesses {low + 1} to {upto}")
-            elif text.split(" rows=")[1] != sha256("\n".join(covered)) or f" n={len(covered)} " not in f" {text} ":
-                problems.append(f"anchor {a['id']}: the revealed guesses {low + 1} to {upto} do not recompute")
             else:
-                report.append(f"anchor {a['id']}: guesses {low + 1} to {upto} recompute")
+                problems.append(f"anchor {a['id']}: {len(covered)} of its {n} guesses, ids {low + 1} to {upto}, are"
+                                f" revealed {age} days after it, and they do not recompute")
             low = upto
         else:
             f = dict(kv.split("=", 1) for kv in text.split()[2:])
@@ -76,6 +86,9 @@ def verify(lines, anchors, comments, git_show=git_file):
             (report if ok else problems).append(f"anchor {a['id']}: {f['file']} at {f['commit'][:7]}"
                                                 + (" matches git" if ok else " does not match git"))
         prev = head
+    outside = [i for i in rows if i <= 0 or i > low]
+    if outside:
+        problems.append(f"{len(outside)} revealed guesses lie outside every rows anchor")
     return problems, report
 
 

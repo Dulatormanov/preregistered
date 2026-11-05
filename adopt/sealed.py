@@ -1,18 +1,23 @@
 """The sealed score (Build day 4): the champion named in PREREGISTRATION.md v1 guesses the 151 sealed issues once.
 
   ADOPTER_DB_URL=... ANTHROPIC_API_KEY=... PREREG_READ_TOKEN=... python -m adopt.sealed
-1. It does nothing before 2026-11-16 00:00 UTC, when the sealed labels are final, or once sealed_guesses has rows.
-2. It reads each sealed issue (title, body, creation time, label events) with GraphQL, and leaves out any issue
-   whose text no longer has its hash in golden/v1/sealed_list.csv.
-3. haiku55-p2 guesses each one, through core/models.py, as job check:sealed ($10 in all). Each guess goes to
-   prereg.sealed_guesses, whose primary key makes a second run fail.
-4. It writes results/sealed.json: per area, the true count, how often it was guessed and how often rightly, the
-   Wilson low and whether it is promoted. Counts only, never an issue number or text.
+1. It does nothing before 2026-11-16 00:00 UTC, when the sealed labels are final, or once every sealed issue has
+   its one row in prereg.sealed_guesses.
+2. It reads each sealed issue (title, body, creation time, label events) with GraphQL. An issue that is gone, or whose
+   text no longer has its hash in golden/v1/sealed_list.csv, gets a 'left_out' row.
+3. haiku55-p2 guesses each other issue that has no row yet, through core/models.py, as job check:sealed ($10 in
+   all). An API error is retried after 5 and 20 seconds, and is never saved: an error is not a guess, so the next
+   daily run tries that issue again, and this run fails loudly. Each answer goes to prereg.sealed_guesses, whose
+   primary key allows one row per issue.
+4. Once every issue has its row, it writes results/sealed.json from them: per area, the true count, how often it
+   was guessed and how often rightly, the Wilson low and whether it is promoted. Counts only, never an issue
+   number or text.
 """
 import csv
 import json
 import os
 import sys
+import time
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,6 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FINAL = datetime(2026, 11, 16, tzinfo=timezone.utc)
 CHAMPION = "haiku55-p2"  # named in PREREGISTRATION.md v1
 OUT = ROOT / "results/sealed.json"
+WAITS = (5, 20)  # seconds before each retry of an API error, as in gate/run_suite.py
 FIELDS = ("number createdAt closedAt stateReason title body author { login } timelineItems(first: 100, itemTypes:"
           " [LABELED_EVENT, UNLABELED_EVENT]) { totalCount nodes { __typename ... on LabeledEvent { createdAt label"
           " { name } actor { __typename login } } ... on UnlabeledEvent { createdAt label { name } actor { __typename"
@@ -43,6 +49,16 @@ def read(numbers, token):
         if it:
             out[it["number"]] = {**issue_row(it), "title": it["title"], "body": it["body"]}
     return out
+
+
+def sealed_list():
+    with open(ROOT / "golden/v1/sealed_list.csv") as f:
+        return {int(r["issue_number"]): r["content_sha256"] for r in csv.DictReader(f)}
+
+
+def rows_of(db):
+    """{issue: (status, area)}: the sealed run's rows so far. The run is complete when every sealed issue has one."""
+    return {n: (status, area) for n, status, area in db.execute("select * from prereg.sealed_rows()").fetchall()}
 
 
 def summary(rows, guesses):
@@ -84,24 +100,38 @@ def main(now=None):
     cfg = champion.load()
     if cfg["c"]["id"] != CHAMPION:
         sys.exit(f"models.lock names {cfg['c']['id']}, but PREREGISTRATION.md v1 names {CHAMPION} for the sealed run")
-    with open(ROOT / "golden/v1/sealed_list.csv") as f:
-        sealed = {int(r["issue_number"]): r["content_sha256"] for r in csv.DictReader(f)}
+    sealed = sealed_list()
     with psycopg.connect(os.environ["ADOPTER_DB_URL"], autocommit=True) as db:
-        if db.execute("select prereg.sealed_count()").fetchone()[0]:
+        done = rows_of(db)
+        if len(done) == len(sealed):
             print("sealed: already run once; it never runs again")
             return False
         numbers, rows = sorted(sealed), {}
         for i in range(0, len(numbers), 25):
             rows.update(read(numbers[i:i + 25], os.environ["PREREG_READ_TOKEN"]))
-        kept = {n: r for n, r in rows.items() if r["content_sha256"] == sealed[n]}
-        client, guesses = anthropic.Anthropic(max_retries=2, timeout=60), {}
-        for n, r in sorted(kept.items()):
-            area, needs_details, h, step = models.answer(db, "check:sealed", cfg, client, r["title"], r["body"])
-            db.execute("select prereg.record_gate_step('check:sealed', %s, %s)", [n, Jsonb(step)])
+        client, errors = anthropic.Anthropic(max_retries=0, timeout=60), 0
+        for n in sorted(set(sealed) - set(done)):
+            r = rows.get(n)
+            if r is None or r["content_sha256"] != sealed[n]:  # gone, or changed since the hash: left out for good
+                status, area, needs_details, h = "left_out", None, None, r["content_sha256"] if r else "gone"
+            else:
+                for wait in (*WAITS, None):
+                    area, needs_details, h, step = models.answer(db, "check:sealed", cfg, client, r["title"], r["body"])
+                    db.execute("select prereg.record_gate_step('check:sealed', %s, %s)", [n, Jsonb(step)])
+                    if step["status"] != "error" or wait is None:
+                        break
+                    time.sleep(wait)
+                status = step["status"]
+                if status == "error":  # not a guess: the next run tries this issue again
+                    errors += 1
+                    continue
             db.execute("select prereg.record_sealed_guess(%s, %s, %s, %s, %s, %s)",
-                       [n, cfg["c"]["id"], step["status"], area, needs_details, h])
-            if area:
-                guesses[n] = area
+                       [n, cfg["c"]["id"], status, area, needs_details, h])
+            done[n] = (status, area)
+    if errors:
+        sys.exit(f"sealed: {errors} issues got only API errors; the next daily run guesses them, and the score waits")
+    kept = {n: rows[n] for n, (status, _) in done.items() if status != "left_out" and n in rows}
+    guesses = {n: area for n, (_, area) in done.items() if area}
     result = {**summary(kept, guesses), "run_at": now.isoformat(timespec="seconds"), "issues": len(sealed),
               "left_out": len(sealed) - len(kept), "rules": "rules/ground_truth.toml v1"}
     OUT.parent.mkdir(exist_ok=True)
