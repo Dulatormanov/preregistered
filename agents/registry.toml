@@ -11,7 +11,8 @@
 # There is no value for "write a commitment" (an owner, a due date, a status): no job can be given one.
 #
 # Slots: a run is due at every minute m where (m - Monday 2026-11-02 00:00 UTC) % cadence_min == at_minute.
-# evidence: event:<kind> is a prereg.run_events row; run:<file> is a successful scheduled run of that workflow.
+# evidence: event:<kind> is a prereg.run_events row; run:<file> is a successful run of that workflow, started by
+#   its schedule or by workflow_dispatch (the backup clock, or a person).
 # first_slot: slots before it do not count, because the job did not exist yet.
 
 model_keys = ["ANTHROPIC_API_KEY"]
