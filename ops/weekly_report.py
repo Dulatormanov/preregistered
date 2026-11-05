@@ -42,19 +42,25 @@ def utc(s):
 
 
 def runs_by_day(start, get):
-    """This repo's workflow runs created on or after start, by UTC day."""
-    out, page = defaultdict(lambda: {"ticks": 0, "failed": 0, "minutes": 0.0}), 1
-    while True:  # note: GitHub lists at most 1,000 runs for a created filter, about 10 days of ticks
-        batch = get(f"/actions/runs?created=%3E%3D{start:%Y-%m-%d}&per_page=100&page={page}")["workflow_runs"]
-        for r in batch:
-            day = out[r["created_at"][:10]]
-            day["ticks"] += r["path"].endswith("/tick.yml")
-            day["failed"] += r["conclusion"] in ("failure", "timed_out", "startup_failure")
-            if r["status"] == "completed" and r.get("run_started_at"):  # wall clock, approval waits included
-                day["minutes"] += (utc(r["updated_at"]) - utc(r["run_started_at"])).total_seconds() / 60
-        if len(batch) < 100:
-            return out
-        page += 1
+    """This repo's workflow runs created from start's UTC day to today, by UTC day. One query per day: GitHub lists
+    at most 1,000 runs for one created filter, and the tick, the watchdog and the watcher make more in a week."""
+    out = defaultdict(lambda: {"ticks": 0, "failed": 0, "minutes": 0.0})
+    day = start.date()
+    while day <= datetime.now(timezone.utc).date():
+        page = 1
+        while True:
+            batch = get(f"/actions/runs?created={day:%Y-%m-%d}&per_page=100&page={page}")["workflow_runs"]
+            for r in batch:
+                d = out[r["created_at"][:10]]
+                d["ticks"] += r["path"].endswith("/tick.yml")
+                d["failed"] += r["conclusion"] in ("failure", "timed_out", "startup_failure")
+                if r["status"] == "completed" and r.get("run_started_at"):  # wall clock, approval waits included
+                    d["minutes"] += (utc(r["updated_at"]) - utc(r["run_started_at"])).total_seconds() / 60
+            if len(batch) < 100:
+                break
+            page += 1
+        day += timedelta(days=1)
+    return out
 
 
 def agreement_line(so_far):

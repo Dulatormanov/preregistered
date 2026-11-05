@@ -51,7 +51,12 @@ def main():
     assert len(rows) == 7 and all(r[1:] == (0, 0, 0, 0, 0, 0, 0) for r in rows[:6])
     assert rows[6] == (today.date(), 2, 1, 1, 1, 0, 1, Decimal("0.000108")), rows[6]
 
-    def get(path):  # two pages: 100 tick runs, then a failed tick and a CI run
+    asked = []
+
+    def get(path):  # today, two pages: 100 tick runs, then a failed tick and a CI run; no run on the other days
+        asked.append(path)
+        if f"created={today:%Y-%m-%d}&" not in path:
+            return {"workflow_runs": []}
         run = {"path": ".github/workflows/tick.yml", "created_at": f"{today:%Y-%m-%d}T00:10:00Z", "status": "completed",
                "conclusion": "success", "run_started_at": f"{today:%Y-%m-%d}T00:10:00Z",
                "updated_at": f"{today:%Y-%m-%d}T00:11:00Z"}
@@ -60,6 +65,7 @@ def main():
         return {"workflow_runs": [dict(run, conclusion="failure"), dict(run, path=".github/workflows/ci.yml")]}
     runs = weekly_report.runs_by_day(start, get)
     assert runs[today.date().isoformat()] == {"ticks": 101, "failed": 1, "minutes": 102.0}
+    assert len(asked) == 8 and sum("&page=2" in p for p in asked) == 1  # one query per day, 7 days and today
 
     text = weekly_report.render(start, rows, runs, [("baseline", 4, 1, 5), ("champion", 4, 3, 5)])  # lint-checked
     assert "champion 3 of 4 counting guesses right (5 scorable)" in text

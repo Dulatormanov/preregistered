@@ -81,13 +81,20 @@ def main():
         for i in range(watchdog.lookback(TICK) + 1):
             polled(t, last - timedelta(minutes=15 * i), trigger="workflow_dispatch" if i in (1, 2) else "schedule")
     newest = watchdog.slot_of(WATCH, NOW - timedelta(minutes=WATCH["grace_min"]))  # watch.yml's newest closed slot
-    served = [newest - timedelta(minutes=WATCH["cadence_min"] * i) for i in (0, 1)]  # the 2 newest: by dispatch only
-    watchdog.gh = fake_gh(fail_upstream=True, runs=[("watch.yml", "workflow_dispatch", s + timedelta(minutes=8))
-                                                    for s in served])  # at :49, 8 minutes into the slot
+    served = [(newest - timedelta(minutes=WATCH["cadence_min"] * i), event)  # the 2 newest: one by the schedule,
+              for i, event in ((0, "workflow_dispatch"), (1, "schedule"))]  # one by the backup clock 8 minutes in
+    watchdog.gh = fake_gh(fail_upstream=True, runs=[("watch.yml", event, s + timedelta(minutes=8)) for s, event in served])
     with psycopg.connect(role_url("observer"), autocommit=True) as o:
         alerts = watchdog.check(o, "token", NOW)
     assert "missed:tick/poll" not in alerts and "missed:watch/watch" not in alerts, alerts
     assert "upstream_read" in alerts and "upstream_missing" not in alerts, alerts
+    suite = next(j for j in tomllib.loads((ROOT / "agents/registry.toml").read_text())["job"] if j["id"] == "suite/run")
+    watchdog.gh = fake_gh(runs=[("suite.yml", "workflow_dispatch", NOW - timedelta(hours=1))])
+    assert watchdog.evidence(None, suite, NOW - timedelta(days=8), "token") == []  # by hand: not the A/A pair
+    t1, t2 = NOW.replace(microsecond=0) - timedelta(hours=2), NOW.replace(microsecond=0) - timedelta(hours=1)
+    watchdog.gh = fake_gh(runs=[("watch.yml", "schedule", t1), ("watch.yml", "workflow_dispatch", t2)])
+    assert [started for _, started, _, _ in watchdog.evidence(None, WATCH, NOW - timedelta(days=1), "token")] == [
+        t1, t2]  # for the watcher, both kinds of run count
     silent = [(last - timedelta(minutes=15 * i), last - timedelta(minutes=15 * i - 9), True, 0) for i in range(8)]
     assert watchdog.slot_alert(TICK, silent, NOW)  # ticks that "succeeded" but saw no upstream issue did nothing
     def ticks(missing):  # a healthy tick in each of the last 8 slots, except the missing ones
