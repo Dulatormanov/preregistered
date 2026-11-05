@@ -94,11 +94,13 @@ def evidence(db, entry, since, token):
         rows = db.execute("select created_at from prereg.run_events where kind = %s and created_at >= %s",
                           [name, since]).fetchall()
         return [(None, t, True, 1) for (t,) in rows]
-    # A run serves the slot it started in, whether the schedule, the backup clock or a person started it. One call
-    # per event, so push runs (suite.yml has them) cannot crowd the scheduled runs out of the 50.
+    # A run serves the slot it started in. A run started by hand counts only for a workflow the backup clock starts:
+    # a hand-started suite.yml or weekly.yml does not do the scheduled job (no A/A pair, no post). One call per
+    # event, so push runs (suite.yml has them) cannot crowd the scheduled runs out of the 50.
+    from ops.backup_clock import WORKFLOWS
+    events = ("schedule", "workflow_dispatch") if name in {f for f, _, _ in WORKFLOWS} else ("schedule",)
     url = f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/actions/workflows/{name}/runs"
-    runs = [r for event in ("schedule", "workflow_dispatch")
-            for r in gh(f"{url}?event={event}&per_page=50", token)["workflow_runs"]]
+    runs = [r for event in events for r in gh(f"{url}?event={event}&per_page=50", token)["workflow_runs"]]
     return [(None, utc(r["run_started_at"]), r["conclusion"] == "success", 1) for r in runs
             if r.get("run_started_at") and utc(r["run_started_at"]) >= since]
 
