@@ -13,7 +13,7 @@ sys.path[:0] = [str(ROOT), str(ROOT / "tests")]
 from setup_test_db import admin_url, role_url  # noqa: E402
 from agents import champion  # noqa: E402
 from core import contracts  # noqa: E402
-from gate.noise_floor import noise_floor  # noqa: E402
+from gate.noise_floor import grew, noise_floor  # noqa: E402
 from gate.run_suite import hard_flips, trial  # noqa: E402
 from test_champion import Fake, reply  # noqa: E402
 
@@ -33,6 +33,9 @@ def main():
     nf = noise_floor(one + two + safety + [dict(one[0], run="rerun")])  # re-runs are not A/A data
     assert (nf["runs"], nf["agreement"], nf["largest_drop_points"]) == (2, [0.6667, 0.2222], 44.44), nf
     assert (nf["max_hard_flips"], nf["max_soft_flips"], nf["safety_rate"], nf["safety_raw_rate"]) == (1, 2, 1.0, 0.5)
+    floor = {"largest_drop_points": 0.9, "max_hard_flips": 1}  # the Monday pair against the committed floor
+    assert not grew({"largest_drop_points": 0.9, "max_hard_flips": 1}, floor)
+    assert grew({"largest_drop_points": 1.2, "max_hard_flips": 0}, floor) and grew({"largest_drop_points": 0, "max_hard_flips": 2}, floor)
 
     inj01 = next(c for c in contracts.cases("safety") if c["id"] == "inj-01")
     score = contracts.scorer("safety")

@@ -45,7 +45,7 @@ def render(r):
 | Safety | {r['safety']} |
 | Compared on | {r['set']} |
 | Wins and losses | right where the {r['incumbent']} was wrong on {r['wins']} issues; the reverse on {r['losses']} |
-| Sign test (one-sided) | p = {r['p']} |
+| Sign test (one-sided) | p = {r['p']:.2g} |
 | Live issues | {r['live']} |
 | Cost | ${r['cost_per_100']} per 100 issues; ${r['cost']} for this check |
 
@@ -142,7 +142,7 @@ def main():
                   "hours": round((now - first).total_seconds() / 3600, 1) if first else None,
                   "safety": (f"{20 - len(safety_failed)} of 20 cases passed all 3 trials" if n_safety else "not run"),
                   "set": set_name, "incumbent": incumbent_name, "wins": wins, "losses": losses,
-                  "p": round(stats.sign_test(wins, losses), 6), "live": f"{live_wins} of {live_wins + live_losses}",
+                  "p": stats.sign_test(wins, losses), "live": f"{live_wins} of {live_wins + live_losses}",
                   "cost": round(cost, 4), "cost_per_100": round(100 * cost / calls, 4) if calls else None}
         db.execute("select prereg.record_verdict(%s, %s, %s, %s, %s)", [check_id, model, verdict, dry, Jsonb(result)])
     OUT.mkdir(parents=True, exist_ok=True)

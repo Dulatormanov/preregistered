@@ -26,9 +26,9 @@ def main():
     assert challenger(cfg, "claude-unknown-9")["prices"] is None  # no price: the check is SKIPPED
     assert challenger(cfg, "claude-haiku-5-5")["c"]["model"] == "claude-haiku-5-5"
     text = render({"model": "m", "dry_run": True, "verdict": "INCONCLUSIVE", "reason": "r", "hours": 1.0,
-                   "safety": "20 of 20", "set": "s", "incumbent": "rules_v0", "wins": 3, "losses": 1, "p": 0.3125,
+                   "safety": "20 of 20", "set": "s", "incumbent": "rules_v0", "wins": 3, "losses": 1, "p": 2.9e-09,
                    "live": "0 of 0", "cost": 0.01, "cost_per_100": 0.02})
-    assert "INCONCLUSIVE" in text and "(dry run)" in text and not lint_refs(text)
+    assert "INCONCLUSIVE" in text and "(dry run)" in text and "p = 2.9e-09" in text and not lint_refs(text)
     print("ok: the watcher picks new Claude models, the check counts wins and losses, and the verdict renders")
 
 

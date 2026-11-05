@@ -123,6 +123,20 @@ autonomy = "read_report"
 suite = "triage"
 secrets = ["GATE_DB_URL", "ANTHROPIC_API_KEY", "PREREG_READ_TOKEN"]
 permissions = ["contents: read"]
+cadence_min = 10080
+at_minute = 373  # Monday 06:13 UTC: the fresh A/A pair
+grace_min = 240
+evidence = "run:suite.yml"
+first_slot = "2026-11-09T06:13:00+00:00"  # the first slot this job could fill
+
+[[job]]
+id = "suite/alert"
+owner = "Dulatormanov"
+tier = "public_write"
+autonomy = "read_report"
+suite = "ci"
+secrets = []
+permissions = ["contents: read", "issues: write"]
 
 [[job]]
 id = "dispatch/dispatch"  # started by hand; it starts the run that needs the write token, so the bot is its actor

@@ -4,6 +4,8 @@ name: suite
 # eval-gate always compares with main's current agent, and the A/A runs for the noise floor, started by hand. The log shows counts only; the results file
 # (codes and hashes, no issue text) and the noise floor are kept as an artifact for 90 days.
 on:
+  schedule:
+    - cron: "13 6 * * 1"  # Monday: a fresh A/A pair, compared with the committed noise floor
   push:
     branches: [main]
     paths: [models.lock, "prompts/**", taxonomy.toml, "agents/champion.py", "agents/guards.py", "agents/rules_v0.py",
@@ -28,6 +30,8 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: read  # a model key and no write right (the registry rule)
+    outputs:
+      grew: ${{ steps.suite.outputs.grew }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -35,12 +39,13 @@ jobs:
       - run: |  # wheels only, so installing runs no package code
           python3 -m venv .venv
           .venv/bin/pip install -q --require-hashes --only-binary :all: -r requirements.txt
-      - run: |
+      - id: suite
+        run: |
           .venv/bin/python -m gate.run_suite triage --runs "$RUNS" --out results.jsonl
-          .venv/bin/python -m gate.noise_floor results.jsonl > noise_floor.json
+          .venv/bin/python -m gate.noise_floor results.jsonl --compare gate/noise_floor.json > noise_floor.json
           cat noise_floor.json
         env:
-          RUNS: ${{ inputs.runs || 1 }}  # a push to main runs it once
+          RUNS: ${{ github.event_name == 'schedule' && 2 || inputs.runs || 1 }}  # a push runs it once, Monday twice
           GATE_DB_URL: ${{ secrets.GATE_DB_URL }}  # gate_runner: its own steps and spend only
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           PREREG_READ_TOKEN: ${{ secrets.PREREG_READ_TOKEN }}  # reads the dev-set issues
@@ -51,3 +56,22 @@ jobs:
             results.jsonl
             noise_floor.json
           retention-days: 90
+
+  alert:
+    needs: run
+    if: github.event_name == 'schedule' && needs.run.outputs.grew != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      issues: write  # one alert issue; this job holds no model key and no database login
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ALERT_SOURCE: suite
+          ALERTS: '{"noise_floor_grew": "the fresh A/A pair moved more than gate/noise_floor.json: measure the floor again"}'
+        run: python3 -m ops.open_alerts
