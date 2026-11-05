@@ -2,6 +2,18 @@
 
 Newest first. Each entry says what was decided and why.
 
+## 2026-11-05 (Build day 6, started early)
+
+- **The one governed write, hash-bound** (ADR-004). `promote.yml` has a plan job and an apply job, and starts only through `dispatch.yml`.
+  - The plan job (`gateway/propose.py`, login `proposer`) saves the day's bundle, its exact bytes and their SHA-256, and prints the first 12 characters of the hash. The database checks the hash itself, and allows one bundle a day.
+  - The apply job waits in `sandbox-write`. The owner approves it with a comment that quotes the 12 characters, after reading the bundle with `make show-bundle`. Only then does it get the write token and the login `gateway_svc`.
+  - `gateway/gateway.py` (123 lines, defended) refuses unless the kill switch is on, the payload has its hash and the one shape, no sandbox workflow reacts to the label, the issue is a target, the label is allowed, and the run has exactly one approval, by the owner, quoting the hash. Then `claim_consent` (defended) uses the approval once, and `record_write` (defended) logs every step and refuses to log a write that has no claim.
+- **Synthetic targets, and said so.** No area has passed the sealed bar yet (the sealed run is on 2026-11-16), so each bundle adds the champion's guess for one of three synthetic sandbox issues (22, 23 and 24; `sandbox/targets.toml`), and is marked synthetic. Once an area is promoted, only a promoted area that is not demoted may be proposed.
+- **18 hostile requests** (`tests/test_enforcement.py`): extra assignees, a milestone, a closed state, a title, a body, an issue type, an issue field, two labels, another repo, a non-canonical payload, a payload that does not have its hash, a label that was not promoted, the side-door label, an issue that is not a target, an approval without the hash, an approval by someone else, the same approval twice, and the kill switch off. Each is refused with zero write calls. One approved bundle lands once.
+- **The live probes** of each promotion run, and the side door: `probes/closure.py` reads the sandbox's workflows and finds `probe-side-door`; the probes show what the gateway refuses and what the token itself can do (CREDENTIALS.md). They need the sandbox write token, which the owner creates.
+- **Check 15:** issue types and issue fields do not exist in a personal repo. The gateway refuses both anyway.
+- **check_roles check 11 now sorts both lists with collation "C".** With the database's default collation, `record_probe` and `record_probe_result` sorted differently on the two sides, so equal sets compared as unequal arrays.
+
 ## 2026-11-05 (Build day 5, started early)
 
 - **The value views** (`db/012_value_views.sql`): `v_agreement_weekly` (scorable, counting and matched guesses per week and series, with the time rule), `v_cost_per_issue` (the live job's model cost per guessed issue) and `v_work_absorbed_monthly` (matched guesses times the owner's median timed minutes, labelled "modelled; 0 realised"). They rest on `v_truth`, which applies the pre-registered rule in SQL, and `v_counting_guesses`. `tests/test_views.py` seeds them through the job functions only. The weekly report adds one line from them.

@@ -310,3 +310,22 @@ autonomy = "read_report"
 suite = "ci"
 secrets = []
 permissions = ["contents: write", "pull-requests: write"]
+
+[[job]]
+id = "promote/plan"  # the day's bundle: one model call, the proposer login, no write right
+owner = "Dulatormanov"
+tier = "ledger"
+autonomy = "read_report"
+suite = "triage"
+secrets = ["PROPOSER_DB_URL", "ANTHROPIC_API_KEY"]
+permissions = ["contents: read"]
+
+[[job]]
+id = "promote/apply"  # the one governed write; the owner approves each run, and the approval must quote the hash
+owner = "Dulatormanov"
+tier = "governed_write"
+autonomy = "carry_consented_update"
+suite = "ci"
+secrets = ["GATEWAY_DB_URL", "PREREG_SANDBOX_WRITE"]
+permissions = ["contents: read", "actions: read"]
+environment = "sandbox-write"

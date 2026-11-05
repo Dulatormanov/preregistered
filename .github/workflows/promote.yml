@@ -1,0 +1,65 @@
+name: promote
+
+# The one governed write (gateway/, ADR-004). Start it only through dispatch.yml, so its triggering actor is the bot
+# and the owner can approve it. The plan job proposes the day's bundle and prints the first 12 characters of its
+# hash. The apply job waits in the environment sandbox-write. Check the bundle first (make show-bundle); then approve
+# with a comment that quotes those 12 characters. The gateway writes once, and the live probes run.
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: sandbox-write
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read  # a model key and no write right (the registry rule)
+    outputs:
+      consent_id: ${{ steps.propose.outputs.consent_id }}
+      hash12: ${{ steps.propose.outputs.hash12 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - run: |  # wheels only, so installing runs no package code
+          python3 -m venv .venv
+          .venv/bin/pip install -q --require-hashes --only-binary :all: -r requirements.txt
+      - id: propose
+        run: .venv/bin/python -m gateway.propose
+        env:
+          PROPOSER_DB_URL: ${{ secrets.PROPOSER_DB_URL }}  # proposer: saves one bundle a day, and spends under the gate cap
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ github.token }}  # reads the public sandbox issue
+
+  apply:
+    needs: plan
+    if: needs.plan.outputs.consent_id != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: sandbox-write  # the owner approves this job, quoting the hash; only then does GitHub release the token
+    permissions:
+      contents: read
+      actions: read  # this run's approval history: the gateway checks that the approval quotes the hash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - run: |  # wheels only, so installing runs no package code
+          python3 -m venv .venv
+          .venv/bin/pip install -q --require-hashes --only-binary :all: -r requirements.txt
+      - run: .venv/bin/python -m gateway.gateway "$CONSENT_ID"
+        env:
+          CONSENT_ID: ${{ needs.plan.outputs.consent_id }}
+          GATEWAY_DB_URL: ${{ secrets.GATEWAY_DB_URL }}  # gateway_svc, a secret of this environment only
+          PREREG_SANDBOX_WRITE: ${{ secrets.PREREG_SANDBOX_WRITE }}
+          GH_TOKEN: ${{ github.token }}
+      - if: always()
+        run: .venv/bin/python -m probes.probe gateway  # the live probes of every promotion run
+        env:
+          PREREG_SANDBOX_WRITE: ${{ secrets.PREREG_SANDBOX_WRITE }}

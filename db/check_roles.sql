@@ -5,16 +5,18 @@
 with t as (select oid, relname from pg_class where relnamespace = 'prereg'::regnamespace and relkind = 'r'),
      rel as (select oid, relname from pg_class where relnamespace = 'prereg'::regnamespace
              and relkind in ('r', 'p', 'v', 'm', 'f')),  -- tables, views and the rest: a view can be written
-     job as (select oid, rolname from pg_roles where rolname in ('triage_agent', 'notary', 'observer', 'collector', 'gate_runner', 'adopter')),
+     job as (select oid, rolname from pg_roles where rolname in ('triage_agent', 'notary', 'observer', 'collector', 'gate_runner', 'adopter', 'proposer', 'gateway_svc')),
      r as (select oid, rolname from pg_roles
-           where rolname in ('postgres', 'triage_agent', 'notary', 'observer', 'collector', 'gate_runner', 'adopter', 'anon', 'authenticated',
+           where rolname in ('postgres', 'triage_agent', 'notary', 'observer', 'collector', 'gate_runner', 'adopter', 'proposer', 'gateway_svc',
+                             'anon', 'authenticated',
                              'service_role')),
      adders as (select rel.relname, array_agg(distinct r.rolname::text order by r.rolname::text) as roles
                 from rel join pg_attribute a on a.attrelid = rel.oid and a.attnum > 0 and not a.attisdropped, r
                 where has_column_privilege(r.oid, rel.oid, a.attnum, 'INSERT') group by rel.relname)
 select check_name, ok from (values
   ('1. postgres does not get the rights of prereg_owner or of a job role by default',
-   not exists (select from pg_roles x where x.rolname in ('prereg_owner', 'triage_agent', 'notary', 'observer', 'collector', 'gate_runner', 'adopter')
+   not exists (select from pg_roles x where x.rolname in ('prereg_owner', 'triage_agent', 'notary', 'observer', 'collector', 'gate_runner', 'adopter',
+                                   'proposer', 'gateway_svc')
                and pg_has_role('postgres', x.oid, 'USAGE'))),
   ('2. postgres can still SET ROLE prereg_owner on purpose',
    pg_has_role('postgres', 'prereg_owner', 'SET')),
@@ -47,11 +49,14 @@ select check_name, ok from (values
    not exists (select from pg_proc f where f.pronamespace = 'prereg'::regnamespace
                and not (f.prosecdef and coalesce(f.proconfig @> array['search_path=pg_catalog, pg_temp'], false)))),
   ('11. each job may call only its own functions',
-   coalesce((select array_agg(e order by e) from (select f.proname::text || ':' || r.rolname::text as e
+   coalesce((select array_agg(e order by e collate "C") from (select f.proname::text || ':' || r.rolname::text as e
              from pg_proc f, r where f.pronamespace = 'prereg'::regnamespace
              and has_function_privilege(r.oid, f.oid, 'EXECUTE')) x), '{}')
-   = coalesce((select array_agg(e order by e) from unnest(array[
-        'claim_next:triage_agent', 'complete:triage_agent', 'model_first_seen:adopter', 'models_seen_count:adopter',
+   = coalesce((select array_agg(e order by e collate "C") from unnest(array[  -- one sort order on both sides
+        'area_live_counts:proposer', 'claim_consent:gateway_svc', 'claim_next:triage_agent',
+        'complete:triage_agent', 'get_bundle:gateway_svc', 'propose_bundle:proposer', 'record_gate_step:proposer',
+        'record_probe_result:gateway_svc', 'record_write:gateway_svc', 'spend_today:proposer',
+        'switch_enabled:gateway_svc', 'switch_enabled:proposer', 'model_first_seen:adopter', 'models_seen_count:adopter',
         'paid_checks:adopter', 'record_challenger_guess:adopter',
         'record_gate_step:adopter', 'record_model_seen:adopter', 'record_sealed_guess:adopter', 'record_verdict:adopter',
         'sealed_answers:adopter', 'sealed_count:adopter', 'spend_today:adopter', 'spend_total:adopter', 'enqueue_issue:triage_agent', 'log_event:triage_agent',

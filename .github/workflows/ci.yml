@@ -33,6 +33,8 @@ jobs:
       COLLECTOR_DB_URL: postgresql://collector:test-only@localhost:5432/postgres
       GATE_DB_URL: postgresql://gate_runner:test-only@localhost:5432/postgres
       ADOPTER_DB_URL: postgresql://adopter:test-only@localhost:5432/postgres
+      PROPOSER_DB_URL: postgresql://proposer:test-only@localhost:5432/postgres
+      GATEWAY_DB_URL: postgresql://gateway_svc:test-only@localhost:5432/postgres
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -96,5 +98,7 @@ jobs:
         run: .venv/bin/python tests/test_sealed.py
       - name: The value views
         run: .venv/bin/python tests/test_views.py
+      - name: The gateway's enforcement (18 hostile requests, fake transport)
+        run: .venv/bin/python tests/test_enforcement.py
       - name: Drift check (it changes the database and puts it back, so it runs last)
         run: .venv/bin/python tests/test_drift.py
