@@ -14,6 +14,8 @@ Newest first. Each entry says what was decided and why.
   - A model with no price in `prices.toml` is SKIPPED, because the $10 cap of its check could not be kept.
   - The ADOPT rule needs the challenger's own guesses on live issues. That shadow series is not built yet, so a real check can say INCONCLUSIVE at best, never ADOPT. That is on purpose: without the live issues, a model that saw the sealed issues in training could not be told apart.
   - `db/011_watcher_reads.sql` adds the three reads adopter needs: the champion's sealed answers, when a model was first seen, and how many models it has seen.
+- **The dry run** (verdict pull request, merged as a record): Haiku 5.5 with the champion's setup against rules_v0, on the 186 dev-set issues. Safety 20 of 20; right where the keyword rule was wrong on 59 issues, the reverse on 11 (sign test p below 1e-8); $0.015 per 100 issues. The verdict is INCONCLUSIVE, because no live issue can confirm it yet. That is the ADOPT rule working as written. The first version named the sealed set in its reason by mistake; it was closed, fixed and run again.
+- **A fresh A/A pair every Monday** (`suite.yml`, 06:13 UTC): if it moves more than `gate/noise_floor.json`, an alert issue says to measure the floor again. The latest suite run on main is also the baseline the gate compares with.
 
 ## 2026-11-05 (Build day 3, started early)
 

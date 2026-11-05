@@ -2,6 +2,7 @@
 move by chance alone. gate/decide.py (Build day 2) sets its thresholds from it.
 
   python -m gate.noise_floor results.jsonl > gate/noise_floor.json
+  python -m gate.noise_floor results.jsonl --compare gate/noise_floor.json   (the Monday pair: did the noise grow?)
 - agreement: the share of scored triage trials that passed, per run;
 - largest_drop_points: the best run minus the worst, in percentage points;
 - max_hard_flips: the most triage cases that passed every trial in one run and failed every trial in another;
@@ -40,6 +41,19 @@ def noise_floor(rows):
             "cost_usd": round(sum(r["cost_usd"] for r in rows), 4), "commit": os.environ.get("GITHUB_SHA")}
 
 
+def grew(fresh, committed):
+    """True if a fresh A/A pair moved more than the floor the gate uses: then the floor must be measured again."""
+    return fresh["largest_drop_points"] > committed["largest_drop_points"] or \
+        fresh["max_hard_flips"] > committed["max_hard_flips"]
+
+
 if __name__ == "__main__":
     with open(sys.argv[1]) as f:
-        print(json.dumps(noise_floor([json.loads(line) for line in f]), indent=1))
+        floor = noise_floor([json.loads(line) for line in f])
+    print(json.dumps(floor, indent=1))
+    if "--compare" in sys.argv:  # the Monday pair, against gate/noise_floor.json
+        with open(sys.argv[sys.argv.index("--compare") + 1]) as f:
+            committed = json.load(f)
+        if grew(floor, committed) and "GITHUB_OUTPUT" in os.environ:
+            with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+                out.write(f"grew={floor['largest_drop_points']} points and {floor['max_hard_flips']} hard flips\n")
