@@ -22,7 +22,7 @@ Option 3, on top of option 2.
 - **No side door.** `probes/closure.py` lists every label that a sandbox workflow reacts to, and the gateway refuses those labels.
 - **A kill switch** (`prereg.switches`): the gateway writes only while the newest row says on, and with no row it is off.
 
-`tests/test_enforcement.py` sends 18 hostile requests; each is refused with zero write calls.
+`tests/test_enforcement.py` sends 19 hostile requests: the plan's 18, and a label that is already there. Each is refused with zero write calls. The gateway reads the issue before it writes, and reports LANDED only if the label was absent, GitHub took the write, and the issue reads back with it; otherwise FAILED or UNVERIFIED, never REFUSED once a write was sent.
 
 ## What it does not stop
 
