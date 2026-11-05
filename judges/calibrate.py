@@ -83,8 +83,8 @@ def make():
 
 def label():
     db = private()
-    for n, q in db.execute("select issue_number, question from questions where human is null order by split,"
-                           " issue_number").fetchall():
+    for n, q in db.execute("select issue_number, question from questions where human is null order by split desc,"
+                           " issue_number").fetchall():  # the 30 held-out ones first: the card needs only those
         title, body = issue_text(n)
         print(f"\n{'=' * 80}\n{title}\n\n{(body or '')[:1200]}\n\nQUESTION: {q}")
         answer = input("good question? [y]es, [n]o, [q]uit: ").strip().lower()
@@ -93,7 +93,9 @@ def label():
         if answer in ("y", "n"):
             db.execute("update questions set human = ? where issue_number = ?", ["good" if answer == "y" else "bad", n])
             db.commit()
-    print(f"{db.execute('select count(*) from questions where human is not null').fetchone()[0]} of 60 labelled")
+    held = db.execute("select count(*) from questions where human is not null and split = 'held_out'").fetchone()[0]
+    print(f"{db.execute('select count(*) from questions where human is not null').fetchone()[0]} of 60 labelled;"
+          f" {held} of the 30 held-out ones, which are all the card needs")
 
 
 def rates(pairs):

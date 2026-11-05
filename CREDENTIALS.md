@@ -26,7 +26,12 @@ A run that needs the write token is always started by `dispatch.yml`, so its tri
 
 | Token | Action | Result | HTTP | Request id |
 |---|---|---|---|---|
-| pending: the first probe runs once `prereg-sandbox-write` exists | | | | |
+| prereg-read | add the label probe-label to the probe issue | DENIED (want DENIED) | 403 | 26C0:20C29C:4AE33A9:F69016E:6AEC5322 |
+| prereg-sandbox-write | reach a job outside the environment | ABSENT (want ABSENT) | - | - |
+| prereg-sandbox-write | add the label probe-label to the probe issue | LANDED (want LANDED) | 200 | E8A8:1C6C93:214B6B7:6D383CD:6AEC5D1D |
+| prereg-sandbox-write | remove the label probe-label again | LANDED (want LANDED) | 200 | E8A9:10D8DA:F4BC2D:325C255:6AEC5D1E |
+
+From probe run 42006701215 on 2026-11-05. Its write job waited until the owner approved it, at 10:40 UTC. `dispatch.yml` had started the run, so prevent self-review did not block that approval (Check 13 passed).
 
 ## The governed write (Build day 6)
 
@@ -34,10 +39,12 @@ Every promotion run (`promote.yml`, started through `dispatch.yml`) ends with th
 
 | Probe | Want | Result |
 |---|---|---|
-| the gateway is asked to assign, close and set a milestone | REFUSED, and the issue reads back unchanged | pending: the first promotion run |
-| the write token assigns the owner directly | LANDED, then removed | pending |
-| the write token adds `probe-side-door` directly | LANDED: side_door_demo.yml closes the issue after this label (then reopened, checked) | pending |
-| the gateway is asked to add `probe-side-door` | REFUSED | pending |
+| the gateway is asked to assign, close and set a milestone | REFUSED, and the issue reads back unchanged | REFUSED, REFUSED and REFUSED; both issues read back as they began |
+| the write token assigns the owner directly | LANDED, then removed | LANDED (201, E850:2F79D4:42A77AD:DA7A8B6:6AEC5DEA), then removed (200, E851:1F3CB:424FFAC:D987175:6AEC5DEB) |
+| the write token adds `probe-side-door` directly | LANDED: side_door_demo.yml closes the issue after this label (then reopened, checked) | LANDED (200, E852:27930C:4268FD7:D97EFAB:6AEC5DEC); side_door_demo.yml closed the issue; reopened (200, E849:BF082:4335921:DBD3665:6AEC5DF7); label removed (200, E84A:1877A7:43080C3:DC71419:6AEC5DF9) |
+| the gateway is asked to add `probe-side-door` | REFUSED | REFUSED |
+
+From promotion run 42012858329 on 2026-11-05. Its one write was bundle 1: the label `documentation` on sandbox issue 24. The bundle was synthetic, because no area can pass the sealed bar before the sealed run, and it names `haiku55-p2-drill`, the rollback drill's id for the same setup as `haiku55-p2`. The owner approved the apply job with a comment that quoted the first 12 characters of the payload hash, `71ee36078612`. The gateway logged three steps for that one write: sent, landed (200, E84C:2F9B:4356C14:DC60B52:6AEC5DE8), and read back (the label is there). The kill switch was on only for this run, from 10:41:27 to 10:44:53 UTC.
 
 - **Check 15:** issue types and issue fields do not exist in this personal sandbox repo (checked on 2026-11-05: GraphQL `issueTypes` is null for a user's repo, and no issue has a type or a field). The gateway refuses both anyway: its one payload shape has no such keys.
 
