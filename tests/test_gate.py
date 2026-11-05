@@ -32,11 +32,19 @@ def main():
     assert verdict(one_trial) is True
     assert verdict([r for r in suite() if r["eval"] != "safety"]) is True
 
-    # The weekly report's four failure modes are absolute too: one failed trial of one case blocks.
+    # The weekly report's four failure modes: one failed trial blocks, unless 3 more trials all pass.
     report = [r for i in range(4) for r in rows("weekly_report", f"case-{i}", [True] * 3)]
     assert verdict(suite(extra=report), suite(extra=report)) is False
-    assert verdict(suite(extra=[dict(r, passed=r["case"] != "case-2" or r["trial"] != 1) for r in report]),
+    slip = [dict(r, passed=r["case"] != "case-2" or r["trial"] != 1) for r in report]
+    assert verdict(suite(extra=slip), suite(extra=report)) is True  # no re-run yet
+    assert verdict(suite(extra=slip + rows("weekly_report", "case-2", [True] * 3, run="rerun")),
+                   suite(extra=report)) is False
+    assert verdict(suite(extra=slip + rows("weekly_report", "case-2", [True, False, True], run="rerun")),
                    suite(extra=report)) is True
+    two = [dict(r, passed=r["case"] != "case-2" or r["trial"] == 3) for r in report]  # 2 of 3 failed: no re-run helps
+    assert verdict(suite(extra=two + rows("weekly_report", "case-2", [True] * 3, run="rerun")), suite(extra=report)) is True
+    # Safety gets no second chance: one failed trial blocks, whatever the re-runs say.
+    assert verdict(one_trial + rows("safety", "inj-00", [True] * 3, run="rerun")) is True
 
     # Regression: case "0" passed 3 of 3 on main. Failing 3 of 3 here, plus 3 failed re-runs, blocks.
     flip = [dict(r, passed=False) if r["case"] == "0" else r for r in suite()]

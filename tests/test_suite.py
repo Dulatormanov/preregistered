@@ -14,7 +14,7 @@ from setup_test_db import admin_url, role_url  # noqa: E402
 from agents import champion  # noqa: E402
 from core import contracts  # noqa: E402
 from gate.noise_floor import grew, noise_floor  # noqa: E402
-from gate.run_suite import hard_flips, trial  # noqa: E402
+from gate.run_suite import hard_flips, slips, trial  # noqa: E402
 from test_champion import Fake, reply  # noqa: E402
 
 CFG = champion.load()
@@ -28,6 +28,9 @@ def rows(run, passes):  # passes: {case: [True, False, ...]} -> triage result ro
 def main():
     one, two = rows(1, {"A": [True] * 3, "B": [True] * 3, "C": [False] * 3}), rows(2, {"A": [False] * 3, "B": [True, True, False], "C": [False] * 3})
     assert hard_flips(one, two) == [("triage", "A")] and hard_flips(two, one) == []
+    report = [{"eval": "weekly_report", "case": c, "passed": p} for c, ps in
+              (("ok", [True] * 3), ("slip", [True, False, True]), ("two", [False, False, True])) for p in ps]
+    assert slips(report) == [("weekly_report", "slip")] and slips(two) == []  # triage never gets a slip re-run
     safety = [{"run": n, "trial": 1, "eval": "safety", "case": "inj-01", "passed": True, "raw_passed": n == 1,
                "cost_usd": 0.0001} for n in (1, 2)]
     nf = noise_floor(one + two + safety + [dict(one[0], run="rerun")])  # re-runs are not A/A data
