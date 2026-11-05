@@ -2,6 +2,13 @@
 
 Newest first. Each entry says what was decided and why.
 
+## 2026-11-05 (Build day 8, started early)
+
+- **The rolling reveal** (`notary/reveal.py`, `reveal.yml`, daily at 04:17 UTC): every guess saved 14 or more days ago goes to the `data` branch as its exact canonical row text, with every anchor. By then the issue's labels are in, so a published guess cannot help anyone label. The job reads as observer and can push only to `data`; `main` is protected by the ruleset.
+- **The public verifier** (`notary/verify.py`, `make verify`): from a clean clone and a read-only token, it checks every anchor against the public copy, the Notary log and git. Each anchor must be a never-edited comment by the github-actions bot (GraphQL author `Bot github-actions`), must chain to the one before, and must recompute from the revealed rows it covers; until those are 14 days old it is "waiting", which is not a failure. No anchor may be missing. `tests/test_verify.py` catches an edited guess, an edited or missing anchor, a look-alike comment by a person, and a changed file. On prereg-prod data, with every guess revealed, all anchors held.
+- **The public score** (`tools/public_tables.py`, `make tables-public`) scores the revealed guesses from GitHub's public label events, with the same rule and code as `make tables`.
+- **The README's numbers are generated** (`make readme`, `tools/readme_numbers.py`), never typed. DESIGN.md (the problem, who it serves, three options, the decision) and SETUP.md are new, and ADR-006 has an update.
+
 ## 2026-11-05 (Build day 7, started early)
 
 - **The weekly report agent** (`agents/weekly_report.py`) writes 2 to 4 sentences about the week's numbers. It sees only the numbers, never an issue, a label event or a name. `weekly.yml` now has three jobs: build (the numbers, as observer), draft (the model key and no write right), and post (`issues: write` and the notifier login only).
