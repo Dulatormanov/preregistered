@@ -2,7 +2,8 @@
 
 Run it after db/003_roles.sql (it needs the notary and observer roles). Until the Day 3 test database
 exists, run it on your Mac against prereg-prod:
-  TRIAGE_DB_URL=... NOTARY_DB_URL=... OBSERVER_DB_URL=... COLLECTOR_DB_URL=... GATE_DB_URL=... ADOPTER_DB_URL=... python tests/test_db_grants.py
+  TRIAGE_DB_URL=... NOTARY_DB_URL=... OBSERVER_DB_URL=... COLLECTOR_DB_URL=... GATE_DB_URL=... ADOPTER_DB_URL=...
+  PROPOSER_DB_URL=... GATEWAY_DB_URL=... python tests/test_db_grants.py
 Every attempt touches zero rows (WHERE false, or an empty table for TRUNCATE inside a rollback), so even
 an attempt that is wrongly allowed changes nothing and uses no id. Each also runs in its own transaction,
 which always rolls back. check_roles.sql covers what this test does not, from the catalog.
@@ -28,6 +29,11 @@ COLUMNS = {  # from the migrations in db/; check_roles.sql reads the live catalo
     "verdicts": ["check_id", "model_id", "verdict", "dry_run", "data", "created_at"],
     "label_areas": ["label", "area"],  # db/012_value_views.sql
     "baseline_timing": ["id", "median_minutes", "decisions"],
+    "consent": ["day", "bundle", "payload", "payload_sha256", "created_at"],  # db/013_consent.sql
+    "consent_claims": ["consent_id", "payload_sha256", "run_id", "approver", "approval_sha256", "created_at"],
+    "writes": ["consent_id", "step", "route", "status", "request_id", "reason", "created_at"],
+    "switches": ["enabled", "reason", "created_at"],
+    "probe_results": ["run_id", "probe", "want", "got", "status", "request_id", "created_at"],
 }
 TIMED_INSERT = {  # an insert that also sets the row's time: no job may do it
     "issues_seen": "(issue_number, gh_created_at, content_sha256, labels_at_seen, first_seen_at)"
@@ -46,6 +52,11 @@ TIMED_INSERT = {  # an insert that also sets the row's time: no job may do it
     "verdicts": "(check_id, model_id, verdict, dry_run, data, created_at) select 'x', 'x', 'HOLD', true, '{}', now()",
     "label_areas": "(label, area) select 'x', 'other'",  # no time column: the same as the plain insert
     "baseline_timing": "(id, median_minutes, decisions) select 1, 1, 10",
+    "consent": "(day, bundle, payload, payload_sha256, created_at) select current_date, '{}', 'x', 'x', now()",
+    "consent_claims": "(consent_id, payload_sha256, run_id, approver, approval_sha256, created_at) select 1, 'x', 'x', 'x', 'x', now()",
+    "writes": "(step, created_at) select 'refused', now()",
+    "switches": "(enabled, reason, created_at) select true, 'x', now()",
+    "probe_results": "(run_id, probe, want, got, created_at) select 'x', 'x', 'LANDED', 'LANDED', now()",
 }
 PLAIN_INSERT = {  # an insert with only the columns that some job may fill
     "issues_seen": "(issue_number, gh_created_at, content_sha256, labels_at_seen) select 1, now(), 'x', '{}'",
@@ -62,11 +73,17 @@ PLAIN_INSERT = {  # an insert with only the columns that some job may fill
     "verdicts": "(check_id, model_id, verdict, dry_run, data) select 'x', 'x', 'HOLD', true, '{}'",
     "label_areas": "(label, area) select 'x', 'other'",  # only a migration changes the mapping
     "baseline_timing": "(id, median_minutes, decisions) select 1, 1, 10",  # only a migration adds the timing
+    "consent": "(day, bundle, payload, payload_sha256) select current_date, '{}', 'x', 'x'",  # only propose_bundle
+    "consent_claims": "(consent_id, payload_sha256, run_id, approver, approval_sha256) select 1, 'x', 'x', 'x', 'x'",
+    "writes": "(step) select 'refused'",  # only record_write
+    "switches": "(enabled, reason) select true, 'x'",  # only the owner, through set_switch
+    "probe_results": "(run_id, probe, want, got) select 'x', 'x', 'LANDED', 'LANDED'",
 }
-MAY_ADD = {"triage_agent": set(), "notary": set(), "observer": set(), "collector": set(), "gate_runner": set(),
-           "adopter": set()}
+MAY_ADD = {r: set() for r in ("triage_agent", "notary", "observer", "collector", "gate_runner", "adopter", "proposer",
+                               "gateway_svc")}  # functions only: no role adds a row directly
 ROLES = (("triage_agent", "TRIAGE_DB_URL"), ("notary", "NOTARY_DB_URL"), ("observer", "OBSERVER_DB_URL"),
-         ("collector", "COLLECTOR_DB_URL"), ("gate_runner", "GATE_DB_URL"), ("adopter", "ADOPTER_DB_URL"))  # functions only
+         ("collector", "COLLECTOR_DB_URL"), ("gate_runner", "GATE_DB_URL"), ("adopter", "ADOPTER_DB_URL"),
+         ("proposer", "PROPOSER_DB_URL"), ("gateway_svc", "GATEWAY_DB_URL"))
 
 
 def attempts(role):

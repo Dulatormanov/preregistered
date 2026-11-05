@@ -28,8 +28,21 @@ A run that needs the write token is always started by `dispatch.yml`, so its tri
 |---|---|---|---|---|
 | pending: the first probe runs once `prereg-sandbox-write` exists | | | | |
 
+## The governed write (Build day 6)
+
+Every promotion run (`promote.yml`, started through `dispatch.yml`) ends with the live probes of `probes/probe.py gateway`, on the sandbox's probe issue and the side-door target (sandbox issue 25). The apply job is the one named job that uses the write token directly, outside the gateway: to show what the token itself can do, and to undo it at once.
+
+| Probe | Want | Result |
+|---|---|---|
+| the gateway is asked to assign, close and set a milestone | REFUSED, and the issue reads back unchanged | pending: the first promotion run |
+| the write token assigns the owner directly | LANDED, then removed | pending |
+| the write token adds `probe-side-door` directly | LANDED: side_door_demo.yml closes the issue (reopened) | pending |
+| the gateway is asked to add `probe-side-door` | REFUSED | pending |
+
+- **Check 15:** issue types and issue fields do not exist in this personal sandbox repo (checked on 2026-11-05: GraphQL `issueTypes` is null for a user's repo, and no issue has a type or a field). The gateway refuses both anyway: its one payload shape has no such keys.
+
 ## Other side doors
 
 - **Webhooks on the sandbox:** 0, checked 2026-11-05 with the API.
 - **Linked GitHub Projects and installed GitHub Apps:** the owner's CLI token cannot list them, because GitHub asks for other scopes. The owner checks both in the browser (Settings > Applications > Installed GitHub Apps, and the sandbox's Projects tab). An app installed on all of the owner's repositories could write to the sandbox, so it would be a side door.
-- **The side door kept on purpose:** `side_door_demo.yml` in the sandbox closes any issue that gets the label `probe-side-door`. The gateway (Build day 6) must refuse that label.
+- **The side door kept on purpose:** `side_door_demo.yml` in the sandbox closes any issue that gets the label `probe-side-door`. `probes/closure.py` finds it, and the gateway refuses that label.

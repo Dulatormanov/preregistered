@@ -35,7 +35,7 @@ def main():
         for f in sorted(DB.glob("[0-9][0-9][0-9]_*.sql")):
             c.execute(f.read_text())
             print("applied", f.name)
-        for role in ("triage_agent", "notary", "observer", "collector", "gate_runner", "adopter"):
+        for role in ("triage_agent", "notary", "observer", "collector", "gate_runner", "adopter", "proposer", "gateway_svc"):
             c.execute(f"alter role {role} password '{TEST_PASSWORD}'")
         bad = [name for name, ok in c.execute((DB / "check_roles.sql").read_text()).fetchall() if not ok]
     print("check_roles:", "all true" if not bad else f"FAIL {bad}")

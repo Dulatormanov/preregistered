@@ -9,7 +9,7 @@ on:
       workflow:
         description: The run to start
         type: choice
-        options: [probe.yml]
+        options: [probe.yml, promote.yml]
         default: probe.yml
 
 permissions: {}

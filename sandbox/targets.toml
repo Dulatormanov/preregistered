@@ -1,0 +1,15 @@
+# The synthetic promotion targets: plain sandbox issues, opened for the governed-write demo, not real reports.
+# Until an area passes the sealed bar, the gateway may add the champion's guessed area only to these issues
+# (gateway/gateway.py). Each issue says that it is synthetic.
+
+[[target]]
+issue = 22
+title = "Studio: the Save button in the table editor stays grey after an edit"
+
+[[target]]
+issue = 23
+title = "Self-hosted: the storage container restarts in a loop after docker compose up"
+
+[[target]]
+issue = 24
+title = "Docs: the row level security guide has a code example that does not run"
