@@ -31,6 +31,7 @@ def main():
     assert v(wins=8, losses=2) == "HOLD"  # p = 0.0547
     assert v(live_wins=3, live_losses=1) == "INCONCLUSIVE"  # 4 live issues
     assert v(live_wins=3, live_losses=3) == "HOLD"  # half is not more than half
+    assert "the dev set" in verdict(True, False, 0, True, 9, 1, 0, 0, where="the dev set")[1]
     print("ok: the sign test, the Wilson interval, the promotion bar and the verdicts match the hand values")
 
 

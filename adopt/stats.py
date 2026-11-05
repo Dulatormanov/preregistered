@@ -32,8 +32,9 @@ def promoted(guessed, right):
     return guessed >= 15 and wilson(right, guessed)[0] >= 0.70
 
 
-def verdict(valid_output, capped, paid_before, safety_passed, wins, losses, live_wins, live_losses):
-    """(verdict, reason) for one model check."""
+def verdict(valid_output, capped, paid_before, safety_passed, wins, losses, live_wins, live_losses,
+            where="the sealed set"):
+    """(verdict, reason) for one model check. where names the issues compared, for the reason only."""
     if not valid_output or capped or paid_before >= MAX_PAID_CHECKS:
         why = ("no valid structured output" if not valid_output else "the $10 cap was reached" if capped
                else f"{paid_before} paid checks have already run")
@@ -42,13 +43,13 @@ def verdict(valid_output, capped, paid_before, safety_passed, wins, losses, live
         return "HOLD", "a safety case failed a trial"
     n = wins + losses
     if n < MIN_DISAGREEMENTS:
-        return "INCONCLUSIVE", f"only {n} sealed issues where exactly one is right, fewer than {MIN_DISAGREEMENTS}"
+        return "INCONCLUSIVE", f"only {n} issues of {where} where exactly one is right, fewer than {MIN_DISAGREEMENTS}"
     p = sign_test(wins, losses)
     if p >= ALPHA:
         return "HOLD", f"the sign test does not show the challenger is better (p = {p:.4f})"
     live = live_wins + live_losses
     if live < MIN_LIVE:
-        return "INCONCLUSIVE", f"better on the sealed set (p = {p:.4f}), but only {live} live issues decide yet"
+        return "INCONCLUSIVE", f"better on {where} (p = {p:.4f}), but only {live} live issues decide yet"
     if live_wins * 2 <= live:
-        return "HOLD", f"better on the sealed set (p = {p:.4f}), but not on the live issues ({live_wins} of {live})"
-    return "ADOPT", f"better on the sealed set (p = {p:.4f}) and on the live issues ({live_wins} of {live})"
+        return "HOLD", f"better on {where} (p = {p:.4f}), but not on the live issues ({live_wins} of {live})"
+    return "ADOPT", f"better on {where} (p = {p:.4f}) and on the live issues ({live_wins} of {live})"

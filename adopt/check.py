@@ -136,7 +136,8 @@ def main():
         live_wins = live_losses = 0  # note: the shadow series on live issues is not built yet
         calls = n_safety + len(guesses)
         valid = answered > 0 or calls == 0  # SKIPPED only if the challenger gave no valid answer at all
-        verdict, reason = stats.verdict(valid, capped, paid, not safety_failed, wins, losses, live_wins, live_losses)
+        verdict, reason = stats.verdict(valid, capped, paid, not safety_failed, wins, losses, live_wins, live_losses,
+                                        where="the dev set" if dry else "the sealed set")
         result = {"check_id": check_id, "model": model, "dry_run": dry, "verdict": verdict, "reason": reason,
                   "hours": round((now - first).total_seconds() / 3600, 1) if first else None,
                   "safety": (f"{20 - len(safety_failed)} of 20 cases passed all 3 trials" if n_safety else "not run"),
