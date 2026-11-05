@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from golden.truth import RULES, counts_for  # noqa: E402
-from tools.tables import VARIANTS, WINDOW, cell, score  # noqa: E402
+from tools.tables import VARIANTS, WINDOW, cell, score, series_of  # noqa: E402
 
 
 def utc(s):
@@ -46,8 +46,8 @@ def main():
                        default=None)
         if anchored is not None:
             created = utc(window[g["issue_number"]]["created_at"])
-            name = "baseline" if g["champion_id"] == "rules_v0" else "champion"
-            series[name].setdefault(g["issue_number"], (g["area"], (anchored - created).total_seconds()))
+            series.setdefault(series_of(g["champion_id"]), {}).setdefault(
+                g["issue_number"], (g["area"], (anchored - created).total_seconds()))
     rules = dict(RULES)
     print("| Series | Live window, pre-registered rule |\n|---|---|")
     for name, gs in series.items():

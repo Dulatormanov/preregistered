@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from golden.truth import RULES, counts_for, truth  # noqa: E402
 
+CHAMPION = "haiku55-p2"  # named in PREREGISTRATION.md v1; a drill or ADOPT champion is a series of its own
 WINDOW = (datetime(2026, 11, 14, tzinfo=timezone.utc), datetime(2026, 12, 5, tzinfo=timezone.utc))
 VARIANTS = [("pre-registered rule", {}), ("labels within 7 days", {"window_days": 7}),
             ("labels within 28 days", {"window_days": 28}), ("the author's template labels count", {"template_labels": "in"}),
@@ -58,8 +59,12 @@ def dev(results):
     return first, [r for r in rows if r["number"] in first]
 
 
+def series_of(champion_id):
+    return {"rules_v0": "baseline", CHAMPION: "champion"}.get(champion_id, champion_id)
+
+
 def live(db):
-    """{number: (area, seconds after creation when its anchor posted)} for both series, and golden-style rows."""
+    """{series: {number: (area, seconds after creation when its anchor posted)}}, and golden-style rows."""
     issues = db.execute("select issue_number, gh_created_at from prereg.issues_seen where gh_created_at >= %s"
                         " and gh_created_at < %s", list(WINDOW)).fetchall()
     events = db.execute("select issue_number, label, action, actor, by_author, labeled_at from prereg.outcomes").fetchall()
@@ -77,12 +82,11 @@ def live(db):
             rules = {**RULES, **change}
             counting = [e["after_s"] for e in r["label_events"] if counts_for(e, rules)]
             r["first_label_s"][json.dumps(rules, sort_keys=True)] = min(counting, default=float("inf"))
-    champion, baseline = {}, {}
+    series = {"champion": {}, "baseline": {}}
     for n, champion_id, area, anchored in guesses:
         if n in created and anchored is not None:
-            series = baseline if champion_id == "rules_v0" else champion
-            series.setdefault(n, (area, (anchored - created[n]).total_seconds()))
-    return champion, baseline, rows
+            series.setdefault(series_of(champion_id), {}).setdefault(n, (area, (anchored - created[n]).total_seconds()))
+    return series, rows
 
 
 def main():
@@ -91,14 +95,14 @@ def main():
     private = (ROOT / "golden/private/issues.jsonl").exists() and results
     dev_guesses, dev_rows = dev(results) if private else ({}, [])
     with psycopg.connect(os.environ["OBSERVER_DB_URL"], autocommit=True) as db:
-        champion, baseline, live_rows = live(db)
-    print("| Ground-truth rule | Dev set, champion | Live window, champion | Live window, baseline |")
-    print("|---|---|---|---|")
+        series, live_rows = live(db)
+    print("| Ground-truth rule | Dev set, champion |" + "".join(f" Live window, {s} |" for s in series))
+    print("|---|---|" + "---|" * len(series))
     for name, change in VARIANTS:
         rules = {**RULES, **change}
         d = cell(*score(dev_guesses, dev_rows, rules)) if private else "needs the private label events"
-        print(f"| {name} | {d} | {cell(*score(champion, live_rows, rules), coverage=True)}"
-              f" | {cell(*score(baseline, live_rows, rules), coverage=True)} |")
+        print(f"| {name} | {d} |" + "".join(f" {cell(*score(gs, live_rows, rules), coverage=True)} |"
+                                            for gs in series.values()))
 
 
 if __name__ == "__main__":

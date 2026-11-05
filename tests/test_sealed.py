@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "tests")]
 from setup_test_db import role_url  # noqa: E402
 from adopt import sealed  # noqa: E402
+from agents import champion  # noqa: E402
 from test_champion import reply  # noqa: E402
 
 
@@ -49,6 +50,14 @@ def main():
 
     assert sealed.main(now=datetime(2026, 11, 15, 23, 59, tzinfo=timezone.utc)) is False  # labels not final yet
     assert not sealed.OUT.exists()
+    real = champion.load()  # the test runs on any models.lock, the rollback drill's included
+    champion.load = lambda: {**real, "c": {**real["c"], "id": "haiku55-p2-drill"}}
+    try:
+        sealed.main(now=datetime(2026, 11, 16, tzinfo=timezone.utc))
+        raise AssertionError("the sealed run ran on a champion that PREREGISTRATION.md does not name")
+    except SystemExit:
+        pass
+    champion.load = lambda: {**real, "c": {**real["c"], "id": sealed.CHAMPION}}
     assert sealed.main(now=datetime(2026, 11, 16, tzinfo=timezone.utc)) is True
     result = json.loads(sealed.OUT.read_text())
     assert (result["issues"], result["left_out"], result["answered"], result["agreement"]) == (151, 2, 149, 1.0)
@@ -61,7 +70,8 @@ def main():
             raise AssertionError("a second guess for a sealed issue was saved")
         except psycopg.errors.UniqueViolation:
             pass
-    print("ok: the sealed run waits for 2026-11-16, leaves out changed issues, runs once, and writes counts only")
+    print("ok: the sealed run waits for 2026-11-16, refuses another champion, leaves out changed issues, runs once,"
+          " and writes counts only")
 
 
 if __name__ == "__main__":
