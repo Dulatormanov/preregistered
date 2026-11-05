@@ -2,6 +2,17 @@
 
 Newest first. Each entry says what was decided and why.
 
+## 2026-11-05 (Build day 7, started early)
+
+- **The weekly report agent** (`agents/weekly_report.py`) writes 2 to 4 sentences about the week's numbers. It sees only the numbers, never an issue, a label event or a name. `weekly.yml` now has three jobs: build (the numbers, as observer), draft (the model key and no write right), and post (`issues: write` and the notifier login only).
+- **The four failure modes, as code** (`agents/report_checks.py`): invented progress (a number not in the data, or a claim of progress), a private item (an issue number, a link, a login, quoted text, or label speed in hours or minutes), accurate text that reads as an accusation (people next to a word about speed or failure), and credit given to the wrong person. The post job adds the summary only if it breaks none, and otherwise posts the numbers alone and says why.
+- **The report suite** (`evals/weekly_report/`, 12 cases, 3 per failure mode, plus 4 known-bad reports in `EVAL_test.py`) runs through the same gate: `gate/decide.py` treats it like safety, so every case must pass all 3 trials. `gate.yml` and main's `suite.yml` now run both suites.
+  - Its first run caught two problems. The number check split dates such as 2026-11-09 into 11 and 09, which are not in the data: fixed, so the data's own dates are set aside first. Then the agent reported "the median time to first label was 30 hours" in all 3 trials of one case: that measures people's speed, so the prompt now says to leave such numbers out. After both fixes it passed 72 of 72 trials, in 2 runs.
+- **The contact budget** (ADR-008, `db/014_contacts.sql`): one weekly report a week, one approval request a day, and one new issue or comment per alert type per 6 hours, as the unique key of `prereg.contacts`. Of 50 sends at once, one lands; a second weekly report fails with 23505. Every job that posts spends first, as `notifier`.
+- **The redrive** (`prereg.redrive_dlq`, `redrive.yml`): one dead letter back into the queue, with a 'redriven' event, started by hand, on main only (the login lives in the environment `adopt`).
+- **The outage test** (`tests/test_outage.py`): during a fake 3-hour outage the worker made 12 calls in 12 ticks, one real call and then one probe a tick. No waiting message was read more than once, nothing went to `triage_dlq`, and all 5 issues were guessed after it. The design already did this: the test proves it.
+- **GAME_DAYS.md** lists the game days, with GD1 and the rollback drill next.
+
 ## 2026-11-05 (Build day 6, started early)
 
 - **The one governed write, hash-bound** (ADR-004). `promote.yml` has a plan job and an apply job, and starts only through `dispatch.yml`.

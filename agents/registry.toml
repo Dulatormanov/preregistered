@@ -80,7 +80,7 @@ owner = "Dulatormanov"
 tier = "public_write"
 autonomy = "read_report"
 suite = "ci"
-secrets = []
+secrets = ["NOTIFIER_DB_URL"]
 permissions = ["contents: read", "issues: write"]
 
 [[job]]
@@ -98,12 +98,21 @@ evidence = "run:weekly.yml"
 first_slot = "2026-11-09T07:23:00+00:00"  # the first slot this job could fill
 
 [[job]]
+id = "weekly/draft"  # the report agent: a model key and no write right; the post job checks its text
+owner = "Dulatormanov"
+tier = "read"
+autonomy = "read_report"
+suite = "weekly_report"
+secrets = ["GATE_DB_URL", "ANTHROPIC_API_KEY"]
+permissions = ["contents: read"]
+
+[[job]]
 id = "weekly/post"
 owner = "Dulatormanov"
 tier = "public_write"
 autonomy = "read_report"
 suite = "ci"
-secrets = []
+secrets = ["NOTIFIER_DB_URL"]
 permissions = ["contents: read", "issues: write"]
 
 [[job]]
@@ -135,7 +144,7 @@ owner = "Dulatormanov"
 tier = "public_write"
 autonomy = "read_report"
 suite = "ci"
-secrets = []
+secrets = ["NOTIFIER_DB_URL"]
 permissions = ["contents: read", "issues: write"]
 
 [[job]]
@@ -195,7 +204,7 @@ owner = "Dulatormanov"
 tier = "public_write"
 autonomy = "read_report"
 suite = "ci"
-secrets = []
+secrets = ["NOTIFIER_DB_URL"]
 permissions = ["contents: read", "issues: write"]
 
 [[job]]
@@ -227,7 +236,7 @@ owner = "Dulatormanov"
 tier = "public_write"
 autonomy = "read_report"
 suite = "ci"
-secrets = []
+secrets = ["NOTIFIER_DB_URL"]
 permissions = ["contents: read", "issues: write"]
 
 [[job]]
@@ -250,7 +259,7 @@ owner = "Dulatormanov"
 tier = "public_write"
 autonomy = "read_report"
 suite = "ci"
-secrets = []
+secrets = ["NOTIFIER_DB_URL"]
 permissions = ["contents: read", "issues: write"]
 
 [[job]]
@@ -329,3 +338,13 @@ suite = "ci"
 secrets = ["GATEWAY_DB_URL", "PREREG_SANDBOX_WRITE"]
 permissions = ["contents: read", "actions: read"]
 environment = "sandbox-write"
+
+[[job]]
+id = "redrive/redrive"  # one dead letter back into the queue, by hand, on main only
+owner = "Dulatormanov"
+tier = "ledger"
+autonomy = "read_report"
+suite = "ci"
+secrets = ["REDRIVER_DB_URL"]
+permissions = ["contents: read"]
+environment = "adopt"

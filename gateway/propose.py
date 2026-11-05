@@ -60,6 +60,7 @@ def main():
                       "why": "synthetic: no area has passed the sealed bar yet" if not promoted else "a promoted area"}
             try:
                 consent_id = db.execute("select prereg.propose_bundle(%s, %s, %s)", [Jsonb(bundle), payload, digest]).fetchone()[0]
+                db.execute("select prereg.spend_contact('approval_request', '')")  # the day's one approval request
             except psycopg.errors.UniqueViolation:
                 why = "today already has a bundle"
     if consent_id:

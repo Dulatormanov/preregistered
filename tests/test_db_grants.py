@@ -3,7 +3,7 @@
 Run it after db/003_roles.sql (it needs the notary and observer roles). Until the Day 3 test database
 exists, run it on your Mac against prereg-prod:
   TRIAGE_DB_URL=... NOTARY_DB_URL=... OBSERVER_DB_URL=... COLLECTOR_DB_URL=... GATE_DB_URL=... ADOPTER_DB_URL=...
-  PROPOSER_DB_URL=... GATEWAY_DB_URL=... python tests/test_db_grants.py
+  PROPOSER_DB_URL=... GATEWAY_DB_URL=... NOTIFIER_DB_URL=... REDRIVER_DB_URL=... python tests/test_db_grants.py
 Every attempt touches zero rows (WHERE false, or an empty table for TRUNCATE inside a rollback), so even
 an attempt that is wrongly allowed changes nothing and uses no id. Each also runs in its own transaction,
 which always rolls back. check_roles.sql covers what this test does not, from the catalog.
@@ -34,6 +34,7 @@ COLUMNS = {  # from the migrations in db/; check_roles.sql reads the live catalo
     "writes": ["consent_id", "step", "route", "status", "request_id", "reason", "created_at"],
     "switches": ["enabled", "reason", "created_at"],
     "probe_results": ["run_id", "probe", "want", "got", "status", "request_id", "created_at"],
+    "contacts": ["kind", "topic", "window_start", "created_at"],  # db/014_contacts.sql
 }
 TIMED_INSERT = {  # an insert that also sets the row's time: no job may do it
     "issues_seen": "(issue_number, gh_created_at, content_sha256, labels_at_seen, first_seen_at)"
@@ -57,6 +58,7 @@ TIMED_INSERT = {  # an insert that also sets the row's time: no job may do it
     "writes": "(step, created_at) select 'refused', now()",
     "switches": "(enabled, reason, created_at) select true, 'x', now()",
     "probe_results": "(run_id, probe, want, got, created_at) select 'x', 'x', 'LANDED', 'LANDED', now()",
+    "contacts": "(kind, topic, window_start, created_at) select 'alert', 'x', now(), now()",
 }
 PLAIN_INSERT = {  # an insert with only the columns that some job may fill
     "issues_seen": "(issue_number, gh_created_at, content_sha256, labels_at_seen) select 1, now(), 'x', '{}'",
@@ -78,12 +80,14 @@ PLAIN_INSERT = {  # an insert with only the columns that some job may fill
     "writes": "(step) select 'refused'",  # only record_write
     "switches": "(enabled, reason) select true, 'x'",  # only the owner, through set_switch
     "probe_results": "(run_id, probe, want, got) select 'x', 'x', 'LANDED', 'LANDED'",
+    "contacts": "(kind, topic, window_start) select 'alert', 'x', now()",  # only spend_contact
 }
 MAY_ADD = {r: set() for r in ("triage_agent", "notary", "observer", "collector", "gate_runner", "adopter", "proposer",
-                               "gateway_svc")}  # functions only: no role adds a row directly
+                               "gateway_svc", "notifier", "redriver")}  # functions only: no role adds a row directly
 ROLES = (("triage_agent", "TRIAGE_DB_URL"), ("notary", "NOTARY_DB_URL"), ("observer", "OBSERVER_DB_URL"),
          ("collector", "COLLECTOR_DB_URL"), ("gate_runner", "GATE_DB_URL"), ("adopter", "ADOPTER_DB_URL"),
-         ("proposer", "PROPOSER_DB_URL"), ("gateway_svc", "GATEWAY_DB_URL"))
+         ("proposer", "PROPOSER_DB_URL"), ("gateway_svc", "GATEWAY_DB_URL"), ("notifier", "NOTIFIER_DB_URL"),
+         ("redriver", "REDRIVER_DB_URL"))
 
 
 def attempts(role):

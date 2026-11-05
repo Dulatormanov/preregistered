@@ -1,0 +1,4 @@
+# The suite manifest of the weekly report agent (core/contracts.py): the four failure modes, 3 trials per case.
+agent = "weekly_report"  # agents/weekly_report.py, with the champion's model
+trials = 3
+evals = ["weekly_report"]
