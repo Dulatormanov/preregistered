@@ -3,7 +3,9 @@ The slot rule itself is replayed against a real outage in tests/test_quiet_failu
 
   PREREG_TEST_ADMIN_URL=... python tests/test_watchdog.py
 """
+import json
 import os
+import subprocess
 import sys
 import tomllib
 from datetime import datetime, timedelta, timezone
@@ -75,6 +77,7 @@ def main():
             "upstream_missing"}
     assert want <= alerts.keys() and "missed:watch/watch" in alerts, sorted(alerts)  # no watch.yml run at all
     assert "777001" not in str(alerts) and "9901" not in str(alerts)  # alert texts hold counts, never numbers
+    assert not alerts["missed:tick/poll"].endswith(watchdog.NEW), alerts  # missed for hours: on at the last run too
 
     with psycopg.connect(role_url("triage_agent"), autocommit=True) as t:  # every slot the rule looks at gets a tick:
         last = watchdog.slot_of(TICK, NOW - timedelta(minutes=45))  # from the schedule, or for 2 in a row the backup clock
@@ -88,6 +91,15 @@ def main():
         alerts = watchdog.check(o, "token", NOW)
     assert "missed:tick/poll" not in alerts and "missed:watch/watch" not in alerts, alerts
     assert "upstream_read" in alerts and "upstream_missing" not in alerts, alerts
+    with psycopg.connect(role_url("triage_agent"), autocommit=True) as t:  # the 2 slots before those get a tick too
+        for i in (6, 7):
+            polled(t, last - timedelta(minutes=15 * i))
+    with psycopg.connect(admin_url(), autocommit=True) as a:  # test-only: the 2 newest closed slots lose theirs
+        a.execute("set role prereg_owner")
+        a.execute("delete from prereg.run_events where kind = 'polled' and (data->>'actual_start')::timestamptz >= %s",
+                  [last - timedelta(minutes=15)])
+    with psycopg.connect(role_url("observer"), autocommit=True) as o:  # off at the last run, so new
+        assert watchdog.check(o, "token", NOW)["missed:tick/poll"].endswith(watchdog.NEW)
     suite = next(j for j in tomllib.loads((ROOT / "agents/registry.toml").read_text())["job"] if j["id"] == "suite/run")
     watchdog.gh = fake_gh(runs=[("suite.yml", "workflow_dispatch", NOW - timedelta(hours=1))])
     assert watchdog.evidence(None, suite, NOW - timedelta(days=8), "token") == []  # by hand: not the A/A pair
@@ -102,6 +114,9 @@ def main():
         return [(slot, slot + timedelta(minutes=9), True, 1) for slot in slots]
     assert not watchdog.slot_alert(TICK, ticks({2}), NOW)  # one missed slot is not an alert
     assert watchdog.slot_alert(TICK, ticks({2, 3}), NOW)  # two in a row are, even behind the newest slot
+    before = NOW - timedelta(minutes=watchdog.EVERY_MIN)  # the watchdog's last run, as check() replays it
+    assert watchdog.slot_alert(TICK, ticks({0, 1}), NOW) and not watchdog.slot_alert(TICK, ticks({0, 1}), before)  # new
+    assert watchdog.slot_alert(TICK, ticks({4, 5}), before)  # an older pair was on at the last run too: a repeat
     young = dict(TICK, first_slot=(NOW - timedelta(minutes=50)).isoformat())  # a job too new for 2 closed slots
     assert watchdog.slot_alert(young, [], NOW) is False and watchdog.slot_alert(TICK, [], NOW) is True
     from ops.backup_clock import WORKFLOWS, slot  # the backup clock's slots are the watchdog's: 10:04 belongs to 09:52
@@ -115,8 +130,22 @@ def main():
     jobs = {"tick.yml": TICK, "watchdog.yml": {"cadence_min": watchdog.EVERY_MIN, "at_minute": 11}, "watch.yml": WATCH}
     assert all(slot(t, first, every) == watchdog.slot_of(jobs[name], t) for name, first, every in WORKFLOWS
                for t in (NOW, NOW + timedelta(minutes=7)))
+    from ops import open_alerts  # with this alert type's 6-hour budget spent, only a new incident goes out
+    calls, real_run = [], subprocess.run
+    subprocess.run = lambda args, **kw: calls.append(args[:3]) or subprocess.CompletedProcess(args, 0, stdout="[]")
+    open_alerts.spend = lambda kind, topic="": False
+    try:
+        for line, sent in ((f"tick/poll: 2 slots in a row had no healthy run{watchdog.NEW}", True),
+                           ("tick/poll: 2 slots in a row had no healthy run", False)):
+            calls.clear()
+            os.environ["ALERTS"] = json.dumps({"missed:tick/poll": line})
+            open_alerts.main()
+            assert (["gh", "issue", "create"] in calls) is sent, (line, calls)
+    finally:
+        subprocess.run = real_run
     print(f"ok: the watchdog raises each of its {len(want) + 1} alert types, and none for a healthy tick or watcher"
-          " slot, whether the schedule or the backup clock started the run")
+          " slot, whether the schedule or the backup clock started the run; a new incident goes out over the"
+          " contact budget, a repeat does not")
 
 
 if __name__ == "__main__":

@@ -22,3 +22,9 @@ Option 2 (`db/014_contacts.sql`). `prereg.spend_contact(kind, topic)` inserts on
 ## What would change my mind
 
 - An alert that matters waits 6 hours behind a duplicate: then alerts get a severity, and severe ones a shorter window.
+
+## Update, 2026-11-05: a new incident is never budgeted
+
+Planning the second half of GD3 found the case above. The watchdog's issue for missed ticks opened at 13:19 UTC and spent that alert type's window until 18:00. A second outage of the same kind in that window would have been seen and logged, but sent to nobody, and its alert could have cleared before 18:00. Yet the issue itself says that the watchdog opens it again if the problem comes back.
+
+So a slot alert now says when it is new: it was not on at the watchdog's run 30 minutes before, which the watchdog works out again from the same evidence (`ops/watchdog.py`). A new incident goes out even over the budget, as a new issue or as an "Again" comment on the open one (`ops/open_alerts.py`). The budget still caps repeats: an alert that was already on gets at most one message per 6 hours. A severity with a shorter window was not needed: the budget is there to stop repeats, and a new incident is not one.
