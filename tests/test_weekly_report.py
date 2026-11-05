@@ -60,7 +60,8 @@ def main():
     runs = weekly_report.runs_by_day(start, get)
     assert runs[today.date().isoformat()] == {"ticks": 101, "failed": 1, "minutes": 102.0}
 
-    text = weekly_report.render(start, rows, runs)  # render() raises if the text fails the reference lint
+    text = weekly_report.render(start, rows, runs, [("baseline", 4, 1, 5), ("champion", 4, 3, 5)])  # lint-checked
+    assert "champion 3 of 4 counting guesses right (5 scorable)" in text
     assert f"| {today:%a %b} {today.day} | 101 | 94 | 1 | 1 | 1 | 1 | 0 | 1 | 0.0001 | 102 |" in text, text
     assert "9901" not in text and "9902" not in text  # no issue numbers in public text
     print("ok: the weekly report counts slots, guesses, dead letters, anchors, spend and runs per day")

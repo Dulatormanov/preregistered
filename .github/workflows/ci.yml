@@ -94,5 +94,7 @@ jobs:
         run: .venv/bin/python tests/test_watchdog.py
       - name: The one sealed run (fake GitHub and Claude)
         run: .venv/bin/python tests/test_sealed.py
+      - name: The value views
+        run: .venv/bin/python tests/test_views.py
       - name: Drift check (it changes the database and puts it back, so it runs last)
         run: .venv/bin/python tests/test_drift.py
