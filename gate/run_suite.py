@@ -90,16 +90,23 @@ def trial(db, cfg, client, name, case, score, waits=WAITS, agent="champion"):
             "input_sha256": h, "output_sha256": sha256(text), "cost_usd": float(step["cost_usd"])}
 
 
+def by_case(rs):
+    out = {}
+    for r in rs:
+        if r["passed"] is not None:
+            out.setdefault((r["eval"], r["case"]), []).append(r["passed"])
+    return out
+
+
 def hard_flips(baseline, rows):
     """(eval, case) pairs that passed every trial of the baseline and fail every trial now."""
-    def by_case(rs):
-        out = {}
-        for r in rs:
-            if r["passed"] is not None:
-                out.setdefault((r["eval"], r["case"]), []).append(r["passed"])
-        return out
     before, now = by_case(baseline), by_case(rows)
     return [k for k, v in now.items() if k in before and all(before[k]) and not any(v)]
+
+
+def slips(rows):
+    """Weekly report cases with exactly one failed trial: 3 more trials decide (gate/decide.py, rule 1)."""
+    return [k for k, v in by_case(rows).items() if k[0] == "weekly_report" and v.count(False) == 1]
 
 
 def summary(rows):
@@ -140,9 +147,10 @@ def main():
         if a.baseline:
             with open(a.baseline) as f:
                 flipped = set(hard_flips([json.loads(line) for line in f], rows))
+            slipped = set(slips(rows))
             rows += list(pool.map(run, [("rerun", m["trials"] + t, name, case) for name, case in cases
-                                         if (name, case["id"]) in flipped for t in range(1, m["trials"] + 1)]))
-            print(f"hard flips re-run: {len(flipped)}")
+                                         if (name, case["id"]) in flipped | slipped for t in range(1, m["trials"] + 1)]))
+            print(f"hard flips re-run: {len(flipped)}; report slips re-run: {len(slipped)}")
     with open(a.out, "w") as f:
         f.writelines(json.dumps(r) + "\n" for r in rows)
     print(summary(rows))
