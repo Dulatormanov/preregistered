@@ -5,6 +5,7 @@ The slot rule itself is replayed against a real outage in tests/test_quiet_failu
 """
 import os
 import sys
+import tomllib
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -18,19 +19,21 @@ from ops import watchdog  # noqa: E402
 
 NOW = datetime.now(timezone.utc)
 TICK = {"cadence_min": 15, "at_minute": 7, "grace_min": 45}
+WATCH = next(j for j in tomllib.loads((ROOT / "agents/registry.toml").read_text())["job"] if j["id"] == "watch/watch")
 
 
 def iso(t):
     return t.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def fake_gh(fail_upstream=False):
+def fake_gh(fail_upstream=False, runs=()):  # runs: (workflow file, event, start) of runs that succeeded
     def gh(url, token):
         if url.endswith("/actions/workflows"):
             return {"workflows": [{"path": ".github/workflows/tick.yml", "state": "active"},
                                   {"path": ".github/workflows/old.yml", "state": "disabled_manually"}]}
-        if "/actions/workflows/" in url:
-            return {"workflow_runs": []}
+        if "/actions/workflows/" in url:  # each event query gets only its own runs
+            return {"workflow_runs": [{"run_started_at": iso(start), "conclusion": "success"}
+                                      for name, event, start in runs if f"/{name}/runs?event={event}&" in url]}
         if fail_upstream:
             raise TimeoutError("upstream")
         return [{"number": 777001, "created_at": iso(NOW - timedelta(minutes=75))},  # never seen: missing
@@ -70,17 +73,21 @@ def main():
         alerts = watchdog.check(o, "token", NOW)
     want = {"missed:tick/poll", "dead_letters", "queue_stuck", "unanchored", "token_expiry", "workflow_off",
             "upstream_missing"}
-    assert want <= alerts.keys(), sorted(alerts)
+    assert want <= alerts.keys() and "missed:watch/watch" in alerts, sorted(alerts)  # no watch.yml run at all
     assert "777001" not in str(alerts) and "9901" not in str(alerts)  # alert texts hold counts, never numbers
 
     with psycopg.connect(role_url("triage_agent"), autocommit=True) as t:  # every slot the rule looks at gets a tick:
         last = watchdog.slot_of(TICK, NOW - timedelta(minutes=45))  # from the schedule, or for 2 in a row the backup clock
         for i in range(watchdog.lookback(TICK) + 1):
             polled(t, last - timedelta(minutes=15 * i), trigger="workflow_dispatch" if i in (1, 2) else "schedule")
-    watchdog.gh = fake_gh(fail_upstream=True)
+    newest = watchdog.slot_of(WATCH, NOW - timedelta(minutes=WATCH["grace_min"]))  # watch.yml's newest closed slot
+    served = [newest - timedelta(minutes=WATCH["cadence_min"] * i) for i in (0, 1)]  # the 2 newest: by dispatch only
+    watchdog.gh = fake_gh(fail_upstream=True, runs=[("watch.yml", "workflow_dispatch", s + timedelta(minutes=8))
+                                                    for s in served])  # at :49, 8 minutes into the slot
     with psycopg.connect(role_url("observer"), autocommit=True) as o:
         alerts = watchdog.check(o, "token", NOW)
-    assert "missed:tick/poll" not in alerts and "upstream_read" in alerts and "upstream_missing" not in alerts, alerts
+    assert "missed:tick/poll" not in alerts and "missed:watch/watch" not in alerts, alerts
+    assert "upstream_read" in alerts and "upstream_missing" not in alerts, alerts
     silent = [(last - timedelta(minutes=15 * i), last - timedelta(minutes=15 * i - 9), True, 0) for i in range(8)]
     assert watchdog.slot_alert(TICK, silent, NOW)  # ticks that "succeeded" but saw no upstream issue did nothing
     def ticks(missing):  # a healthy tick in each of the last 8 slots, except the missing ones
@@ -90,12 +97,19 @@ def main():
     assert watchdog.slot_alert(TICK, ticks({2, 3}), NOW)  # two in a row are, even behind the newest slot
     young = dict(TICK, first_slot=(NOW - timedelta(minutes=50)).isoformat())  # a job too new for 2 closed slots
     assert watchdog.slot_alert(young, [], NOW) is False and watchdog.slot_alert(TICK, [], NOW) is True
-    from ops.backup_clock import slot  # the backup clock's slot is the watchdog's: 10:04 belongs to 09:52
+    from ops.backup_clock import WORKFLOWS, slot  # the backup clock's slots are the watchdog's: 10:04 belongs to 09:52
     assert [slot(datetime(2026, 11, 5, 10, m, 30, tzinfo=timezone.utc)).strftime("%H:%M") for m in (4, 7, 19, 21)] == [
         "09:52", "10:07", "10:07", "10:07"]
-    assert all(slot(t) == watchdog.slot_of(TICK, t) for t in (NOW, NOW + timedelta(minutes=7)))
-    print(f"ok: the watchdog raises each of its {len(want) + 1} alert types, and none for a healthy tick slot,"
-          " whether the schedule or the backup clock started the tick")
+    at = {name: [slot(datetime(2026, 11, 5, 10, m, 30, tzinfo=timezone.utc), first, every).strftime("%H:%M")
+                 for m in (4, 19, 34, 49)] for name, first, every in WORKFLOWS}  # the slot at each minute cron runs it
+    assert at == {"tick.yml": ["09:52", "10:07", "10:22", "10:37"],  # 12 minutes into each tick slot
+                  "watchdog.yml": ["09:41", "10:11", "10:11", "10:41"],  # 8 and 23 minutes into a watchdog slot
+                  "watch.yml": ["09:41", "09:41", "09:41", "10:41"]}, at  # from 8 minutes into a watcher slot
+    jobs = {"tick.yml": TICK, "watchdog.yml": {"cadence_min": watchdog.EVERY_MIN, "at_minute": 11}, "watch.yml": WATCH}
+    assert all(slot(t, first, every) == watchdog.slot_of(jobs[name], t) for name, first, every in WORKFLOWS
+               for t in (NOW, NOW + timedelta(minutes=7)))
+    print(f"ok: the watchdog raises each of its {len(want) + 1} alert types, and none for a healthy tick or watcher"
+          " slot, whether the schedule or the backup clock started the run")
 
 
 if __name__ == "__main__":

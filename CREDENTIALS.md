@@ -50,7 +50,7 @@ From promotion run 42012858329 on 2026-11-05. Its one write was bundle 1: the la
 
 ## The backup clock
 
-`prereg-backup-clock` is a fine-grained token with Actions read and write, on this repo only. It exists in one place: `~/prereg/token` on the owner's server, readable by the owner's user only. Cron runs `ops/backup_clock.py` next to it 12 minutes after each tick slot, and the script starts `tick.yml` only if GitHub's schedule has not (ADR-001). The token can start, re-run, cancel and delete this repo's workflow runs, and turn its workflows on or off; the watchdog alerts on a workflow that is off. It cannot change code, issues, labels or secrets.
+`prereg-backup-clock` is a fine-grained token with Actions read and write, on this repo only. It exists in one place: `~/prereg/token` on the owner's server, readable by the owner's user only. Cron runs `ops/backup_clock.py` next to it 12 minutes after each tick slot, and the script starts `tick.yml`, `watchdog.yml` or `watch.yml` only if GitHub's schedule has not (ADR-001). The token can start, re-run, cancel and delete this repo's workflow runs, and turn its workflows on or off; the watchdog alerts on a workflow that is off. It cannot change code, issues, labels or secrets.
 
 ## Other side doors
 
