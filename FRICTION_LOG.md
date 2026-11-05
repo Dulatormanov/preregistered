@@ -13,6 +13,6 @@ What was harder than it should be, and what it cost.
 
 ## 2026-11-04 (Days 5 to 7, built the same evening)
 
-- After the 19:05 UTC push (Day 2, the last change to `tick.yml`), GitHub ran no scheduled tick for hours: none from 18:53 UTC until at least 21:40 UTC. GitHub's status page showed no open incident. A tick started by hand worked. Hand-started ticks do not stand in for the schedule: the weekly report counts them apart, as tick runs that fill no slot.
+- After the 19:05 UTC push (Day 2, the last change to `tick.yml`), GitHub ran no scheduled tick for hours: none from 18:53 UTC until 00:15 UTC on Nov 5, a gap of 5 hours 22 minutes. GitHub's status page showed no open incident. A tick started by hand worked. Hand-started ticks do not stand in for the schedule: the weekly report counts them apart, as tick runs that fill no slot.
 - The plan's package name `platform/` would clash with Python's own `platform` module, which the Anthropic SDK imports. Build day 1 uses `core/` instead.
 - `drift.yml` did not parse: a `": "` inside an unquoted `${{ }}` default is not valid YAML. GitHub showed the workflow under its file path and refused to start it. Nothing had checked the YAML, because the registry test reads the workflow files with its own small reader. CI now parses every workflow file with Ruby's YAML parser, which the runners already have.

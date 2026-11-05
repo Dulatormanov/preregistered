@@ -29,7 +29,7 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
-          if git diff --name-only "$BASE" HEAD | grep -qE '^(models\.lock|prompts/|taxonomy\.toml|agents/(champion|guards|rules_v0)\.py|core/|evals/|suites/|gate/run_suite\.py)'; then
+          if git diff --name-only "$BASE" HEAD | grep -qE '^(models\.lock|prompts/|taxonomy\.toml|agents/(champion|guards|rules_v0|weekly_report|report_checks)\.py|core/|evals/|suites/|gate/run_suite\.py)'; then
             echo "agent=yes" >> "$GITHUB_OUTPUT"
           else
             echo "eval-gate: pass (no agent file changed, so the suites did not run)"
@@ -54,7 +54,9 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           PREREG_READ_TOKEN: ${{ secrets.PREREG_READ_TOKEN }}
         run: |
-          .venv/bin/python -m gate.run_suite triage --runs 1 --baseline main/results.jsonl --out pr.jsonl
+          .venv/bin/python -m gate.run_suite triage --runs 1 --baseline main/results.jsonl --out pr_triage.jsonl
+          .venv/bin/python -m gate.run_suite weekly_report --runs 1 --baseline main/results.jsonl --out pr_report.jsonl
+          cat pr_triage.jsonl pr_report.jsonl > pr.jsonl
           .venv/bin/python -m gate.decide pr.jsonl main/results.jsonl gate/noise_floor.json
       - if: always() && steps.changed.outputs.agent == 'yes'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2

@@ -5,10 +5,11 @@
 with t as (select oid, relname from pg_class where relnamespace = 'prereg'::regnamespace and relkind = 'r'),
      rel as (select oid, relname from pg_class where relnamespace = 'prereg'::regnamespace
              and relkind in ('r', 'p', 'v', 'm', 'f')),  -- tables, views and the rest: a view can be written
-     job as (select oid, rolname from pg_roles where rolname in ('triage_agent', 'notary', 'observer', 'collector', 'gate_runner', 'adopter', 'proposer', 'gateway_svc')),
+     job as (select oid, rolname from pg_roles where rolname in ('triage_agent', 'notary', 'observer', 'collector', 'gate_runner', 'adopter', 'proposer', 'gateway_svc',
+                                                           'notifier', 'redriver')),
      r as (select oid, rolname from pg_roles
            where rolname in ('postgres', 'triage_agent', 'notary', 'observer', 'collector', 'gate_runner', 'adopter', 'proposer', 'gateway_svc',
-                             'anon', 'authenticated',
+                             'notifier', 'redriver', 'anon', 'authenticated',
                              'service_role')),
      adders as (select rel.relname, array_agg(distinct r.rolname::text order by r.rolname::text) as roles
                 from rel join pg_attribute a on a.attrelid = rel.oid and a.attnum > 0 and not a.attisdropped, r
@@ -16,7 +17,7 @@ with t as (select oid, relname from pg_class where relnamespace = 'prereg'::regn
 select check_name, ok from (values
   ('1. postgres does not get the rights of prereg_owner or of a job role by default',
    not exists (select from pg_roles x where x.rolname in ('prereg_owner', 'triage_agent', 'notary', 'observer', 'collector', 'gate_runner', 'adopter',
-                                   'proposer', 'gateway_svc')
+                                   'proposer', 'gateway_svc', 'notifier', 'redriver')
                and pg_has_role('postgres', x.oid, 'USAGE'))),
   ('2. postgres can still SET ROLE prereg_owner on purpose',
    pg_has_role('postgres', 'prereg_owner', 'SET')),
@@ -53,7 +54,8 @@ select check_name, ok from (values
              from pg_proc f, r where f.pronamespace = 'prereg'::regnamespace
              and has_function_privilege(r.oid, f.oid, 'EXECUTE')) x), '{}')
    = coalesce((select array_agg(e order by e collate "C") from unnest(array[  -- one sort order on both sides
-        'area_live_counts:proposer', 'claim_consent:gateway_svc', 'claim_next:triage_agent',
+        'area_live_counts:proposer', 'queue_health:redriver', 'redrive_dlq:redriver', 'spend_contact:notifier',
+        'spend_contact:proposer', 'claim_consent:gateway_svc', 'claim_next:triage_agent',
         'complete:triage_agent', 'get_bundle:gateway_svc', 'propose_bundle:proposer', 'record_gate_step:proposer',
         'record_probe_result:gateway_svc', 'record_write:gateway_svc', 'spend_today:proposer',
         'switch_enabled:gateway_svc', 'switch_enabled:proposer', 'model_first_seen:adopter', 'models_seen_count:adopter',

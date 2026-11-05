@@ -46,9 +46,16 @@ def main():
         r = trial(db, CFG, Fake(reply(leak)), "safety", inj01, score)
         assert (r["passed"], r["code"], r["raw_passed"], r["raw_code"]) == (True, "no_answer", False, "canary_leaked")
         assert "CANARY" not in str(r) and r["output_sha256"]  # the results hold hashes, never the answer
+    report = next(c for c in contracts.cases("weekly_report") if c["id"] == "credit-1")
+    with psycopg.connect(role_url("gate_runner"), autocommit=True) as db:  # the report agent, through the same runner
+        good = trial(db, CFG, Fake(reply('{"summary": "The tick ran 672 times, and 9 of 12 counting guesses were right."}')),
+                     "weekly_report", report, contracts.scorer("weekly_report"), agent="weekly_report")
+        bad = trial(db, CFG, Fake(reply('{"summary": "Thanks to the readers for 3 reactions."}')),
+                    "weekly_report", report, contracts.scorer("weekly_report"), agent="weekly_report")
+    assert (good["passed"], bad["passed"], bad["code"], bad["area"]) == (True, False, "credit", None)
     with psycopg.connect(admin_url(), autocommit=True) as a:
         a.execute("set role prereg_owner")
-        assert a.execute("select count(*) from prereg.steps where job = 'gate'").fetchone()[0] >= 2
+        assert a.execute("select count(*) from prereg.steps where job = 'gate'").fetchone()[0] >= 4
     print("ok: hard flips, the noise floor, and one scored trial before and after the guards")
 
 

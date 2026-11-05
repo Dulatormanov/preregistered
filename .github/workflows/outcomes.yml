@@ -42,21 +42,21 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-      issues: write  # opens one alert issue in this repo
+      issues: write  # one issue or comment per alert type per 6 hours; the only login is notifier
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+      - run: |  # wheels only, so installing runs no package code
+          python3 -m venv .venv
+          .venv/bin/pip install -q --require-hashes --only-binary :all: -r requirements.txt
       - name: Open one alert issue for unknown labels
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          NOTIFIER_DB_URL: ${{ secrets.NOTIFIER_DB_URL }}  # spends from the contact budget only
+          ALERT_SOURCE: outcomes
           UNKNOWN: ${{ needs.collect.outputs.unknown }}
         run: |
-          title="Unknown Supabase label in outcomes"
-          printf '%s\n' "New label(s) that rules/ground_truth.toml neither maps nor ignores: $UNKNOWN." \
-            "Add each one to [areas] or [ignore] by pull request." > body.txt
-          python3 scripts/lint_refs.py body.txt  # every posted text passes the reference lint
-          if [ -z "$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number')" ]; then
-            gh issue create --title "$title" --body-file body.txt
-          fi
+          ALERTS="$(python3 -c 'import json, os; print(json.dumps({"unknown_label": "new Supabase labels that rules/ground_truth.toml neither maps nor ignores: " + os.environ["UNKNOWN"] + "; add each to [areas] or [ignore] by pull request"}))')" \
+            .venv/bin/python -m ops.open_alerts

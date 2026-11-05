@@ -59,19 +59,32 @@ def load(evals, token, pool):
     return out, skipped
 
 
-def trial(db, cfg, client, name, case, score, waits=WAITS):
+def report_answer(db, cfg, client, case):
+    """The weekly report agent's answer for one case, under the gate's cap: its case body is the week's numbers."""
+    from agents import weekly_report
+    used, cap = models.spent(db, "gate")
+    if used >= cap:
+        raise models.OverCap(f"job gate has spent ${used} of its ${cap} cap")
+    return weekly_report.draft(cfg, client, json.loads(case["body"]))
+
+
+def trial(db, cfg, client, name, case, score, waits=WAITS, agent="champion"):
     for wait in (*waits, None):
-        text, h, step = models.answer_raw(db, "gate", cfg, client, case["title"], case["body"])
+        if agent == "weekly_report":
+            text, h, step = report_answer(db, cfg, client, case)
+        else:
+            text, h, step = models.answer_raw(db, "gate", cfg, client, case["title"], case["body"])
         db.execute("select prereg.record_gate_step('gate', %s, %s)",
                    [int(case["id"]) if case["id"].isdigit() else None, Jsonb(step)])
         if step["status"] != "error" or wait is None:
             break
         time.sleep(wait)
-    guarded = text if text is not None and not guards.check(text, cfg["areas"]) else None
+    shaped = agent == "weekly_report" or not guards.check(text, cfg["areas"])  # the report's checks are its scorer
+    guarded = text if text is not None and shaped else None
     passed, code = score(guarded, case)
     raw_passed, raw_code = score(text, case)
     error = step["status"] == "error"
-    area = json.loads(guarded)["area"] if guarded is not None else None  # one of 6 codes: never issue text
+    area = json.loads(guarded)["area"] if guarded is not None and agent != "weekly_report" else None  # a code, never text
     return {"eval": name, "case": case["id"], "status": step["status"], "area": area, "passed": None if error else passed,
             "code": "error" if error else code, "raw_passed": None if error else raw_passed, "raw_code": raw_code,
             "input_sha256": h, "output_sha256": sha256(text), "cost_usd": float(step["cost_usd"])}
@@ -119,7 +132,7 @@ def main():
 
         def run(job):
             n, t, name, case = job
-            return {"run": n, "trial": t, **trial(db, cfg, client, name, case, scores[name])}
+            return {"run": n, "trial": t, **trial(db, cfg, client, name, case, scores[name], agent=m["agent"])}
 
         jobs = [(n, t, name, case) for n in range(1, a.runs + 1) for t in range(1, m["trials"] + 1)
                 for name, case in cases]  # trial by trial, so a short API outage cannot take all trials of a case

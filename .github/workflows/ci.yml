@@ -35,6 +35,8 @@ jobs:
       ADOPTER_DB_URL: postgresql://adopter:test-only@localhost:5432/postgres
       PROPOSER_DB_URL: postgresql://proposer:test-only@localhost:5432/postgres
       GATEWAY_DB_URL: postgresql://gateway_svc:test-only@localhost:5432/postgres
+      NOTIFIER_DB_URL: postgresql://notifier:test-only@localhost:5432/postgres
+      REDRIVER_DB_URL: postgresql://redriver:test-only@localhost:5432/postgres
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -65,6 +67,7 @@ jobs:
           .venv/bin/python tests/test_budget.py
           .venv/bin/python evals/triage/EVAL_test.py
           .venv/bin/python evals/safety/EVAL_test.py
+          .venv/bin/python evals/weekly_report/EVAL_test.py
           .venv/bin/python tests/test_registry.py
           .venv/bin/python tests/test_quiet_failure.py
           .venv/bin/python tests/test_gate.py
@@ -100,5 +103,9 @@ jobs:
         run: .venv/bin/python tests/test_views.py
       - name: The gateway's enforcement (18 hostile requests, fake transport)
         run: .venv/bin/python tests/test_enforcement.py
+      - name: A fake 3-hour provider outage
+        run: .venv/bin/python tests/test_outage.py
+      - name: The contact budget and the redrive
+        run: .venv/bin/python tests/test_contacts.py
       - name: Drift check (it changes the database and puts it back, so it runs last)
         run: .venv/bin/python tests/test_drift.py

@@ -37,14 +37,18 @@ jobs:
     timeout-minutes: 3
     permissions:
       contents: read
-      issues: write  # one open issue per alert type; this job holds no database login
+      issues: write  # one issue or comment per alert type per 6 hours; the only login is notifier
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+      - run: |  # wheels only, so installing runs no package code
+          python3 -m venv .venv
+          .venv/bin/pip install -q --require-hashes --only-binary :all: -r requirements.txt
       - env:
           GH_TOKEN: ${{ github.token }}
+          NOTIFIER_DB_URL: ${{ secrets.NOTIFIER_DB_URL }}  # spends from the contact budget only
           GH_REPO: ${{ github.repository }}
           ALERT_SOURCE: drift check
           ALERTS: ${{ needs.check.outputs.alerts }}  # empty if the check did not finish: then one did_not_run alert
-        run: python3 -m ops.open_alerts
+        run: .venv/bin/python -m ops.open_alerts

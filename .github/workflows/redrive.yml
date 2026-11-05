@@ -1,0 +1,38 @@
+name: redrive
+
+# Put one dead letter back into the work queue (prereg.redrive_dlq), as a logged 'redriven' event. Started by hand
+# with the message id from the watchdog's dead_letters alert, after the cause is fixed. Only main may run it: the
+# login lives in the environment adopt. A redriven issue first seen over 24 hours ago expires, and fails the tick.
+on:
+  workflow_dispatch:
+    inputs:
+      msg_id:
+        description: The dead letter's message id in triage_dlq
+        type: number
+        required: true
+
+permissions: {}
+
+jobs:
+  redrive:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    environment: adopt  # REDRIVER_DB_URL lives here, and only main may use it
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - run: |  # wheels only, so installing runs no package code
+          python3 -m venv .venv
+          .venv/bin/pip install -q --require-hashes --only-binary :all: -r requirements.txt
+      - run: |
+          .venv/bin/python -c 'import os, sys, psycopg
+          with psycopg.connect(os.environ["REDRIVER_DB_URL"], autocommit=True) as db:
+              ok = db.execute("select prereg.redrive_dlq(%s)", [int(os.environ["MSG_ID"])]).fetchone()[0]
+          print("redriven" if ok else "no such dead letter")
+          sys.exit(0 if ok else 1)'
+        env:
+          REDRIVER_DB_URL: ${{ secrets.REDRIVER_DB_URL }}
+          MSG_ID: ${{ inputs.msg_id }}

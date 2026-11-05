@@ -10,6 +10,7 @@ import os
 import urllib.request
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import psycopg
 
@@ -81,6 +82,20 @@ def render(start, rows, runs, so_far=()):
     return text
 
 
+def numbers(start, rows, runs, so_far):
+    """The week in numbers: totals over its days, and the live window so far. Counts only."""
+    days = [r[0].isoformat() for r in rows]
+    total = lambda i: sum(r[i] for r in rows)  # noqa: E731
+    return {"week": f"{start:%Y-%m-%d} to {start + timedelta(days=6):%Y-%m-%d}", "days_reported": len(rows),
+            "tick_runs": sum(runs.get(d, {}).get("ticks", 0) for d in days),
+            "missed_slots": SLOTS_PER_DAY * len(rows) - total(1),
+            "failed_runs": sum(runs.get(d, {}).get("failed", 0) for d in days),
+            "champion_guesses": total(2), "baseline_guesses": total(3), "dead_letters": total(4), "expired": total(5),
+            "anchors": total(6), "spend_usd": round(float(sum(r[7] for r in rows)), 4),
+            "live_window": {series: {"counting_guesses": counting, "right": matched, "scorable": scorable}
+                            for series, counting, matched, scorable in so_far}}
+
+
 def get(path):
     req = urllib.request.Request(f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}{path}", headers={
         "Authorization": f"Bearer {os.environ['GH_TOKEN']}", "Accept": "application/vnd.github+json",
@@ -97,7 +112,10 @@ def main():
         first = db.execute("select min(created_at)::date from prereg.run_events where kind = 'polled'").fetchone()[0]
         so_far = db.execute(SO_FAR).fetchall()
     rows = [r for r in rows if first is None or r[0] >= first]  # days before the first tick are left out
-    print(render(start, rows, runs_by_day(start, get), so_far))
+    runs = runs_by_day(start, get)
+    print(render(start, rows, runs, so_far))
+    if os.environ.get("REPORT_DATA"):  # the week's numbers, for the report agent (agents/weekly_report.py)
+        Path(os.environ["REPORT_DATA"]).write_text(json.dumps(numbers(start, rows, runs, so_far), sort_keys=True))
 
 
 if __name__ == "__main__":

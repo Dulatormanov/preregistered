@@ -64,6 +64,21 @@ def main():
     assert "champion 3 of 4 counting guesses right (5 scorable)" in text
     assert f"| {today:%a %b} {today.day} | 101 | 94 | 1 | 1 | 1 | 1 | 0 | 1 | 0.0001 | 102 |" in text, text
     assert "9901" not in text and "9902" not in text  # no issue numbers in public text
+    week = weekly_report.numbers(start, rows, runs, [("champion", 4, 3, 5)])
+    assert (week["tick_runs"], week["missed_slots"], week["champion_guesses"], week["dead_letters"]) == (101, 96 * 7 - 2, 1, 1)
+    assert week["live_window"]["champion"] == {"counting_guesses": 4, "right": 3, "scorable": 5}
+
+    # The post step keeps the agent's summary only if it breaks none of the four failure modes.
+    import json, subprocess, tempfile  # noqa: E401
+    tmp = Path(tempfile.mkdtemp())
+    (tmp / "data.json").write_text(json.dumps(week))
+    for summary, kept in (("This week there were 101 tick runs.", True), ("Thanks to the team for 101 tick runs.", False)):
+        (tmp / "report.md").write_text(text)
+        (tmp / "summary.txt").write_text(summary)
+        subprocess.run([sys.executable, "-m", "agents.report_post", tmp / "report.md", tmp / "summary.txt",
+                        tmp / "data.json"], cwd=ROOT, check=True, capture_output=True)
+        posted = (tmp / "report.md").read_text()
+        assert (summary in posted) is kept and ("was left out" in posted) is not kept, posted[:300]
     print("ok: the weekly report counts slots, guesses, dead letters, anchors, spend and runs per day")
 
 
