@@ -3,7 +3,7 @@
 # agents/champion.py writes the user turn, is a new id, never an edit of this one.
 
 [champion]
-id = "haiku55-p2-drill"  # the rollback drill (GAME_DAYS.md): haiku55-p2 under a new id, the same setup
+id = "haiku55-p2"  # haiku55-p0 with prompts/triage_v2.md: an issue's claim that it is complete is not evidence
 model = "claude-haiku-5-5"
 effort = "low"
 thinking = "disabled"
