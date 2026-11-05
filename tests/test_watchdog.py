@@ -39,9 +39,10 @@ def fake_gh(fail_upstream=False):
     return gh
 
 
-def polled(t, slot, saw_upstream=True):
+def polled(t, slot, saw_upstream=True, trigger="schedule"):  # the backup clock starts its ticks 12 minutes in
+    start = (slot + timedelta(minutes=9 if trigger == "schedule" else 12)).isoformat()
     t.execute("select prereg.log_event('polled', %s)", [Jsonb({
-        "trigger": "schedule", "planned_start": slot.isoformat(), "actual_start": (slot + timedelta(minutes=9)).isoformat(),
+        "trigger": trigger, "planned_start": slot.isoformat() if trigger == "schedule" else start, "actual_start": start,
         "http_status": 200, "lost": 0, "token_expires": f"{NOW + timedelta(days=3):%Y-%m-%d %H:%M:%S} UTC",
         "champion": {"guessed": 1, "errors": 0}, **({"newest_upstream": 777003} if saw_upstream else {})})])
 
@@ -72,10 +73,10 @@ def main():
     assert want <= alerts.keys(), sorted(alerts)
     assert "777001" not in str(alerts) and "9901" not in str(alerts)  # alert texts hold counts, never numbers
 
-    with psycopg.connect(role_url("triage_agent"), autocommit=True) as t:  # every slot the rule looks at gets a tick
-        last = watchdog.slot_of(TICK, NOW - timedelta(minutes=45))
+    with psycopg.connect(role_url("triage_agent"), autocommit=True) as t:  # every slot the rule looks at gets a tick:
+        last = watchdog.slot_of(TICK, NOW - timedelta(minutes=45))  # from the schedule, or for 2 in a row the backup clock
         for i in range(watchdog.lookback(TICK) + 1):
-            polled(t, last - timedelta(minutes=15 * i))
+            polled(t, last - timedelta(minutes=15 * i), trigger="workflow_dispatch" if i in (1, 2) else "schedule")
     watchdog.gh = fake_gh(fail_upstream=True)
     with psycopg.connect(role_url("observer"), autocommit=True) as o:
         alerts = watchdog.check(o, "token", NOW)
@@ -89,7 +90,12 @@ def main():
     assert watchdog.slot_alert(TICK, ticks({2, 3}), NOW)  # two in a row are, even behind the newest slot
     young = dict(TICK, first_slot=(NOW - timedelta(minutes=50)).isoformat())  # a job too new for 2 closed slots
     assert watchdog.slot_alert(young, [], NOW) is False and watchdog.slot_alert(TICK, [], NOW) is True
-    print(f"ok: the watchdog raises each of its {len(want) + 1} alert types, and none for a healthy tick slot")
+    from ops.backup_clock import slot  # the backup clock's slot is the watchdog's: 10:04 belongs to 09:52
+    assert [slot(datetime(2026, 11, 5, 10, m, 30, tzinfo=timezone.utc)).strftime("%H:%M") for m in (4, 7, 19, 21)] == [
+        "09:52", "10:07", "10:07", "10:07"]
+    assert all(slot(t) == watchdog.slot_of(TICK, t) for t in (NOW, NOW + timedelta(minutes=7)))
+    print(f"ok: the watchdog raises each of its {len(want) + 1} alert types, and none for a healthy tick slot,"
+          " whether the schedule or the backup clock started the tick")
 
 
 if __name__ == "__main__":

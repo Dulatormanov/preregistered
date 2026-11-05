@@ -84,11 +84,12 @@ def poll_ok(d):
 def evidence(db, entry, since, token):
     """(slot, started, ok, outputs) runs of one job since a time, from the ledger or the run list."""
     kind, _, name = entry["evidence"].partition(":")
-    if kind == "event" and name == "polled":  # a tick says which slot it served; runs started by hand fill none
-        rows = db.execute("select data from prereg.run_events where kind = 'polled' and created_at >= %s"
-                          " and data->>'trigger' = 'schedule'", [since]).fetchall()
-        return [(utc(d["planned_start"]), utc(d["actual_start"]), poll_ok(d), 1 if d.get("newest_upstream") else 0)
-                for (d,) in rows]  # a tick that saw no upstream issue at all did nothing
+    if kind == "event" and name == "polled":  # a scheduled tick says which slot it served; a tick that the backup
+        # clock (ops/backup_clock.py) or a person started serves the slot it started in
+        rows = db.execute("select data from prereg.run_events where kind = 'polled' and created_at >= %s",
+                          [since]).fetchall()
+        return [(utc(d["planned_start"]) if d.get("trigger") == "schedule" else None, utc(d["actual_start"]),
+                 poll_ok(d), 1 if d.get("newest_upstream") else 0) for (d,) in rows]  # no upstream issue: did nothing
     if kind == "event":
         rows = db.execute("select created_at from prereg.run_events where kind = %s and created_at >= %s",
                           [name, since]).fetchall()

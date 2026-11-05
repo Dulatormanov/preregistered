@@ -12,6 +12,7 @@ How to run this from nothing. Every secret, its scope and its rotation are in `c
 4. **The sandbox repo** (`Dulatormanov/prereg-sandbox`): the six area labels, `probe-label`, `probe-side-door` and `side_door_demo.yml`; `python sandbox/create_fixtures.py` opens the 20 injection fixtures, and `sandbox/targets.toml` lists the synthetic promotion targets.
 5. **Healthchecks.io:** a check "tick" (period 15 minutes) whose URL is `HC_TICK_URL`, and a check "watchdog" (period 30, grace 30) whose URL is `HC_WATCHDOG_URL`.
 6. **The kill switch** starts off. To let the gateway write, run `select prereg.set_switch(true, 'why')` as `prereg_owner`.
+7. **The backup clock.** On a server of your own, put `ops/backup_clock.py` in `~/prereg/`, and next to it, in `~/prereg/token` (mode 600), a fine-grained token with Actions read and write on this repo only. Then add the cron line from the script's first lines. It starts `tick.yml` whenever GitHub's schedule misses a slot (ADR-001).
 
 ## Tests
 

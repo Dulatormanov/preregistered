@@ -24,3 +24,10 @@ The terms say Actions is for developing and testing your own applications, and t
 
 - GitHub warns about this use. Then the tick moves to cron on a small server that same day.
 - Scheduled runs come hours apart. Then the alarm grace comes from the measured delays (Check 3), and the README reports them.
+
+## Update, 2026-11-05: a backup clock
+
+Scheduled runs did come hours apart. From Nov 4 18:00 to Nov 5 07:30 UTC, GitHub started 10 ticks in 54 slots, and on Nov 5 it started none from 07:57 to 09:40. A guess that comes hours late can lose to the first human label, and then it does not count. So the tick stays on GitHub Actions, but a backup clock now makes sure that every slot gets a run:
+- cron on the owner's server runs `ops/backup_clock.py` 12 minutes after each slot. If GitHub's schedule has not started `tick.yml` since the slot began, the script starts it (`workflow_dispatch`). That run is an ordinary public Actions run, so option 3's problem, runs that nobody outside can see, does not apply.
+- Its token can use Actions on this repo and nothing else (`credentials.toml`, CREDENTIALS.md).
+- The watchdog counts a tick for the slot it started in, whoever started it. The weekly report's missed slots still count only GitHub's schedule, so Check 3 stays measured.
