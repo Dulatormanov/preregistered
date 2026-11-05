@@ -26,6 +26,8 @@ COLUMNS = {  # from the migrations in db/; check_roles.sql reads the live catalo
     "challenger_results": ["check_id", "model_id", "issue_set", "case_key", "status", "area", "needs_details", "passed",
                            "input_sha256", "created_at"],
     "verdicts": ["check_id", "model_id", "verdict", "dry_run", "data", "created_at"],
+    "label_areas": ["label", "area"],  # db/012_value_views.sql
+    "baseline_timing": ["id", "median_minutes", "decisions"],
 }
 TIMED_INSERT = {  # an insert that also sets the row's time: no job may do it
     "issues_seen": "(issue_number, gh_created_at, content_sha256, labels_at_seen, first_seen_at)"
@@ -42,6 +44,8 @@ TIMED_INSERT = {  # an insert that also sets the row's time: no job may do it
     "sealed_guesses": "(issue_number, champion_id, status, input_sha256, created_at) select 1, 'x', 'ok', 'x', now()",
     "challenger_results": "(check_id, model_id, issue_set, case_key, status, created_at) select 'x', 'x', 'dev', 'x', 'ok', now()",
     "verdicts": "(check_id, model_id, verdict, dry_run, data, created_at) select 'x', 'x', 'HOLD', true, '{}', now()",
+    "label_areas": "(label, area) select 'x', 'other'",  # no time column: the same as the plain insert
+    "baseline_timing": "(id, median_minutes, decisions) select 1, 1, 10",
 }
 PLAIN_INSERT = {  # an insert with only the columns that some job may fill
     "issues_seen": "(issue_number, gh_created_at, content_sha256, labels_at_seen) select 1, now(), 'x', '{}'",
@@ -56,6 +60,8 @@ PLAIN_INSERT = {  # an insert with only the columns that some job may fill
     "sealed_guesses": "(issue_number, champion_id, status, input_sha256) select 1, 'x', 'ok', 'x'",
     "challenger_results": "(check_id, model_id, issue_set, case_key, status) select 'x', 'x', 'dev', 'x', 'ok'",
     "verdicts": "(check_id, model_id, verdict, dry_run, data) select 'x', 'x', 'HOLD', true, '{}'",
+    "label_areas": "(label, area) select 'x', 'other'",  # only a migration changes the mapping
+    "baseline_timing": "(id, median_minutes, decisions) select 1, 1, 10",  # only a migration adds the timing
 }
 MAY_ADD = {"triage_agent": set(), "notary": set(), "observer": set(), "collector": set(), "gate_runner": set(),
            "adopter": set()}

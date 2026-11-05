@@ -2,6 +2,18 @@
 
 Newest first. Each entry says what was decided and why.
 
+## 2026-11-05 (Build day 5, started early)
+
+- **The value views** (`db/012_value_views.sql`): `v_agreement_weekly` (scorable, counting and matched guesses per week and series, with the time rule), `v_cost_per_issue` (the live job's model cost per guessed issue) and `v_work_absorbed_monthly` (matched guesses times the owner's median timed minutes, labelled "modelled; 0 realised"). They rest on `v_truth`, which applies the pre-registered rule in SQL, and `v_counting_guesses`. `tests/test_views.py` seeds them through the job functions only. The weekly report adds one line from them.
+  - The label mapping is now also a table, `prereg.label_areas`, made from `rules/ground_truth.toml` v1 (60 labels). A new version of the rules is a new migration.
+  - `prereg.baseline_timing` stays empty until the owner times 15 decisions, so the modelled minutes stay empty too ("not measured"), as the cut list allows.
+- **ADR-002 (source of truth):** Supabase Postgres is the only store.
+- **The checkpoint**, against the never-cut list:
+  - done: the Day-0 clock, the roles and functions, the gate with its known-bad controls, one transaction per message, the quiet-failure alarms, and the honesty rules (the reference lint, counts only, the disclaimer);
+  - waiting for the owner: the live probes (the sandbox write token), the judge's card (hand labels) and the timed baseline;
+  - still to build: the gateway with hash-bound consent (Build day 6), the four-failure-mode suite and the `models.lock` drill (Build day 7), the rolling reveal and the generated results table (Build day 8); GD3 is on Nov 21;
+  - cut so far: nothing. The days run about a week ahead of the plan, so the cut order is not needed yet.
+
 ## 2026-11-05 (Build day 4, started early)
 
 - **The sealed score cannot run before 2026-11-16**, when the sealed labels are final, so it is built to run by itself. `sealed.yml` checks every day at 07:47 UTC. `adopt/sealed.py` does nothing before that date, and nothing after the one run. On the day, it reads the 151 sealed issues with GraphQL, leaves out any whose text no longer has its hash, lets haiku55-p2 (the champion that v1 names) guess each one, and writes `results/sealed.json`: per area, the true count, the guesses, the right ones, the Wilson low and whether the area is promoted. Counts only. A job with no model key and no database login opens the pull request with it.

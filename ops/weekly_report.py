@@ -55,11 +55,22 @@ def runs_by_day(start, get):
         page += 1
 
 
-def render(start, rows, runs):
+SO_FAR = """select g.series, sum(g.counting), sum(g.matched), sum(g.scorable) from prereg.v_agreement_weekly g
+            where g.week >= date_trunc('week', timestamptz '2026-11-14 00:00+00') group by 1 order by 1"""
+
+
+def agreement_line(so_far):
+    """One line from v_agreement_weekly: the live window so far, under the pre-registered rule."""
+    parts = [f"{series} {matched} of {counting} counting guesses right ({scorable} scorable)"
+             for series, counting, matched, scorable in so_far]
+    return "Live window so far (labels still arrive for 14 days): " + "; ".join(parts) + "."
+
+
+def render(start, rows, runs, so_far=()):
     end = start + timedelta(days=6)
     lines = [f"**Weekly report v0, {start:%b} {start.day} to {end:%b} {end.day}, UTC.** Counts only; no model wrote"
              f" this. A missed slot is a 15-minute slot with no scheduled tick.", "", HEAD]
-    tail = ["", "Independent project, not affiliated with Supabase."]
+    tail = ["", agreement_line(so_far) if so_far else "", "Independent project, not affiliated with Supabase."]
     for day, slots, champion, baseline, dead, expired, anchors, spend in rows:
         r = runs.get(day.isoformat(), {"ticks": 0, "failed": 0, "minutes": 0.0})
         lines.append(f"| {day:%a %b} {day.day} | {r['ticks']} | {SLOTS_PER_DAY - slots} | {r['failed']} | {champion}"
@@ -84,8 +95,9 @@ def main():
         db.execute("set timezone = 'UTC'")  # the days are UTC days
         rows = db.execute(LEDGER, {"start": start}).fetchall()
         first = db.execute("select min(created_at)::date from prereg.run_events where kind = 'polled'").fetchone()[0]
+        so_far = db.execute(SO_FAR).fetchall()
     rows = [r for r in rows if first is None or r[0] >= first]  # days before the first tick are left out
-    print(render(start, rows, runs_by_day(start, get)))
+    print(render(start, rows, runs_by_day(start, get), so_far))
 
 
 if __name__ == "__main__":
