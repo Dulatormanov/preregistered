@@ -41,6 +41,10 @@ Every promotion run (`promote.yml`, started through `dispatch.yml`) ends with th
 
 - **Check 15:** issue types and issue fields do not exist in this personal sandbox repo (checked on 2026-11-05: GraphQL `issueTypes` is null for a user's repo, and no issue has a type or a field). The gateway refuses both anyway: its one payload shape has no such keys.
 
+## The backup clock
+
+`prereg-backup-clock` is a fine-grained token with Actions read and write, on this repo only. It exists in one place: `~/prereg/token` on the owner's server, readable by the owner's user only. Cron runs `ops/backup_clock.py` next to it 12 minutes after each tick slot, and the script starts `tick.yml` only if GitHub's schedule has not (ADR-001). The token can start, re-run, cancel and delete this repo's workflow runs, and turn its workflows on or off; the watchdog alerts on a workflow that is off. It cannot change code, issues, labels or secrets.
+
 ## Other side doors
 
 - **Webhooks on the sandbox:** 0, checked 2026-11-05 with the API.
