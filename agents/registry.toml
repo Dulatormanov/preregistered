@@ -348,3 +348,26 @@ suite = "ci"
 secrets = ["REDRIVER_DB_URL"]
 permissions = ["contents: read"]
 environment = "adopt"
+
+[[job]]
+id = "reveal/reveal"  # the rolling reveal: reads as observer, pushes only to the data branch, then verifies
+owner = "Dulatormanov"
+tier = "public_write"
+autonomy = "read_report"
+suite = "ci"
+secrets = ["OBSERVER_DB_URL"]
+permissions = ["contents: write"]
+cadence_min = 1440
+at_minute = 257  # 04:17 UTC
+grace_min = 240
+evidence = "run:reveal.yml"
+first_slot = "2026-11-06T04:17:00+00:00"  # the first slot this job could fill
+
+[[job]]
+id = "reveal/alert"
+owner = "Dulatormanov"
+tier = "public_write"
+autonomy = "read_report"
+suite = "ci"
+secrets = ["NOTIFIER_DB_URL"]
+permissions = ["contents: read", "issues: write"]

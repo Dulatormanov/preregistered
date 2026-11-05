@@ -1,0 +1,77 @@
+name: reveal
+
+# The rolling reveal (notary/reveal.py), daily: the guesses saved 14 or more days ago, and every anchor, go to the data
+# branch. Then notary/verify.py recomputes every anchor from that public copy, the Notary log and git, as anyone could.
+# If the verifier fails, the alert job opens an issue.
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: reveal
+  cancel-in-progress: false
+
+jobs:
+  reveal:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write  # pushes to the data branch only; main is protected by the ruleset
+    outputs:
+      verified: ${{ steps.verify.outputs.verified }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0  # the anchored files, at their commits
+      - run: |  # wheels only, so installing runs no package code
+          python3 -m venv .venv
+          .venv/bin/pip install -q --require-hashes --only-binary :all: -r requirements.txt
+      - run: .venv/bin/python -m notary.reveal data-out
+        env:
+          OBSERVER_DB_URL: ${{ secrets.OBSERVER_DB_URL }}  # the observer role: reads, never writes
+      - name: Publish to the data branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git worktree add -q data-branch origin/data
+          cp data-out/guesses.jsonl data-out/anchors.jsonl data-branch/
+          cd data-branch
+          git add guesses.jsonl anchors.jsonl
+          if git diff --cached --quiet; then echo "reveal: nothing new"; exit 0; fi
+          git commit -q -m "Reveal: the guesses saved 14 or more days ago, and every anchor"
+          git push -q "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPO}.git" HEAD:data
+      - id: verify
+        run: |
+          if .venv/bin/python -m notary.verify data-out; then echo "verified=yes" >> "$GITHUB_OUTPUT"; else echo "verified=no" >> "$GITHUB_OUTPUT"; fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  alert:
+    needs: reveal
+    if: always() && needs.reveal.outputs.verified != 'yes'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      issues: write  # one issue or comment per alert type per 6 hours; the only login is notifier
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - run: |  # wheels only, so installing runs no package code
+          python3 -m venv .venv
+          .venv/bin/pip install -q --require-hashes --only-binary :all: -r requirements.txt
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          NOTIFIER_DB_URL: ${{ secrets.NOTIFIER_DB_URL }}  # spends from the contact budget only
+          ALERT_SOURCE: reveal
+          ALERTS: '{"verify_failed": "notary/verify.py could not recompute the Notary log from the public data, or the reveal did not finish"}'
+        run: .venv/bin/python -m ops.open_alerts

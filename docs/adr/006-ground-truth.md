@@ -25,3 +25,9 @@ The rules are in `rules/ground_truth.toml` and the code is in `golden/truth.py`.
 
 - Maintainers start labelling through a bot. Then the agent-label switch decides, and v1 says which way.
 - A new area label appears often. Then it joins the map by pull request, and the change is written in DECISIONS.md.
+
+## Update, 2026-11-05 (Build day 8)
+
+- **The same rule in three places, kept equal.** `golden/truth.py` scores the dev and sealed sets; `prereg.v_truth` (`db/012_value_views.sql`) applies the rule in SQL for the value views, with the mapping copied from `rules/ground_truth.toml` v1 into `prereg.label_areas`; and `tools/public_tables.py` applies it to GitHub's public label events, for anyone. `tests/test_tables.py` and `tests/test_views.py` check that each one counts what the rule says.
+- **The time rule is part of the live score:** a guess counts only if the anchor that covers it was posted before the issue's first counting label.
+- **Anyone can recompute it.** Fourteen days after a guess is saved, `notary/reveal.py` publishes it on the `data` branch. `make verify` recomputes every anchor from that copy, and `make tables-public` scores it from the public label events, with a read-only token.
