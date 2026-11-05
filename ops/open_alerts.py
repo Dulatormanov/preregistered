@@ -1,11 +1,14 @@
 """Open one issue per alert type, or comment on the one that is open, within the contact budget: at most one new
-issue or comment per alert type per 6 hours (ops/notify.py). Counts only, and every text passes the reference lint
+issue or comment per alert type per 6 hours (ops/notify.py). A new incident goes out even over the budget: a slot
+alert that was not on at the watchdog's last run (ops/watchdog.py, NEW), so a second outage soon after a fixed one
+is never silent. Counts only, and every text passes the reference lint
 first. Run by the alert jobs: ALERTS holds {type: line}, and ALERT_SOURCE names the job (the watchdog by default)."""
 import json
 import os
 import subprocess
 
 from ops.notify import spend
+from ops.watchdog import NEW
 from scripts.lint_refs import check as lint_refs
 
 
@@ -21,10 +24,12 @@ def main():
                 " again if the problem comes back.")
         if lint_refs(title + "\n" + body):
             raise SystemExit("an alert text failed the reference lint")
-        if not spend("alert", title):
+        new = line.endswith(NEW)
+        if not spend("alert", title) and not new:
             print("over the contact budget, not sent:", title)
         elif title in open_issues:
-            subprocess.run(["gh", "issue", "comment", str(open_issues[title]), "--body", f"Still true: {line}."], check=True)
+            subprocess.run(["gh", "issue", "comment", str(open_issues[title]), "--body",
+                            f"{'Again' if new else 'Still true'}: {line}."], check=True)
             print("commented:", title)
         else:
             subprocess.run(["gh", "issue", "create", "--title", title, "--body", body], check=True)

@@ -4,7 +4,8 @@ Every 30 minutes (watchdog.yml) it checks:
 - slots: each job in agents/registry.toml with a cadence must have a healthy run in each slot: a run that
   succeeded and produced its output. A tick's output is the upstream list it read: a tick that saw no upstream
   issue at all did nothing. Two unhealthy slots in a row raise an alert for that job, wherever they fall
-  between two watchdog runs;
+  between two watchdog runs. An alert that was not on at the watchdog's last run is new, and goes out even over
+  the contact budget (ops/open_alerts.py): the budget caps repeats, never a new incident;
 - the queue: any dead letter, or a message older than 60 minutes (a drain that does nothing);
 - the anchors: a guess saved more than 30 minutes ago that no anchor covers yet;
 - the read token: it expires within 14 days;
@@ -28,6 +29,7 @@ UPSTREAM = "https://api.github.com/repos/supabase/supabase/issues"
 OLDEST_MESSAGE_S, UNANCHORED, TOKEN_DAYS = 3600, timedelta(minutes=30), 14
 UPSTREAM_FROM, UPSTREAM_TO = timedelta(minutes=90), timedelta(minutes=60)  # the window it checks, before now
 EVERY_MIN = 30  # how often watchdog.yml runs
+NEW = ", new since the watchdog's last run"  # the end of a new slot alert's line (ops/open_alerts.py)
 
 
 def slot_of(entry, t):
@@ -111,8 +113,10 @@ def check(db, token, now):
     for entry in tomllib.loads((ROOT / "agents/registry.toml").read_text())["job"]:
         if "cadence_min" in entry:
             since = now - timedelta(minutes=(lookback(entry) + 3) * entry["cadence_min"] + entry["grace_min"])
-            if slot_alert(entry, evidence(db, entry, since, token), now):
-                alerts[f"missed:{entry['id']}"] = f"{entry['id']}: 2 slots in a row had no healthy run"
+            runs = evidence(db, entry, since, token)  # it reaches back far enough for the last run's view too
+            if slot_alert(entry, runs, now):
+                new = not slot_alert(entry, runs, now - timedelta(minutes=EVERY_MIN))
+                alerts[f"missed:{entry['id']}"] = f"{entry['id']}: 2 slots in a row had no healthy run{NEW if new else ''}"
     dead, oldest = db.execute("select * from prereg.queue_health()").fetchone()
     for kind in queue_alerts(dead, oldest):
         alerts[kind] = f"queue: {dead} dead letters, oldest message {oldest // 60} minutes old"
