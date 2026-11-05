@@ -9,7 +9,8 @@ Every check refuses with a reason, and a refusal sends no write at all:
    the label is promoted by the sealed score, or the bundle is synthetic (no area has passed the bar yet);
 4. this run has exactly one approval, by the owner, and its comment quotes the first 12 characters of the hash;
 5. the approval is claimed once: prereg.claim_consent fails on a second claim, or on any other hash.
-Then it sends the one write, logs each step in prereg.writes, and reads the issue back.
+It reads the issue first and refuses if the label is already there. Then it sends the one write, logs each step
+in prereg.writes, and reads the issue back.
 """
 import hashlib
 import json
@@ -68,12 +69,23 @@ def check(db, consent_id, approvals, side_doors):
     return issue, label, digest, a
 
 
+def labels_on(transport, issue):
+    status, _, it = transport.read_issue(issue)
+    if not 200 <= status < 300:
+        raise Refused(f"could not read sandbox issue {issue} first (HTTP {status})")
+    return [lab["name"] for lab in it.get("labels", [])]
+
+
 def apply(db, consent_id, run_id, approvals, transport, side_doors):
-    """(landed, reason): one governed write, or a refusal that sent nothing."""
+    """(outcome, reason): LANDED, or REFUSED (nothing sent), FAILED (sent, not accepted) or UNVERIFIED (sent and
+    accepted, but the read-back does not show it). LANDED needs all three: the label was absent, GitHub took the
+    write, and the issue reads back with the label."""
     import psycopg
     known = db.execute("select (select payload from prereg.get_bundle(%s)) is not null", [consent_id]).fetchone()[0]
     try:
         issue, label, digest, a = check(db, consent_id, approvals, side_doors)
+        if label in labels_on(transport, issue):  # a write that changes nothing proves nothing
+            raise Refused(f"sandbox issue {issue} already has the label {label}")
         try:
             db.execute("select prereg.claim_consent(%s, %s, %s, %s, %s)",
                        [consent_id, digest, run_id, a["user"]["login"], sha256(a["comment"])])
@@ -83,16 +95,19 @@ def apply(db, consent_id, run_id, approvals, transport, side_doors):
             raise Refused("the claim does not match the bundle's hash")
     except Refused as e:
         db.execute("select prereg.record_write(%s, 'refused', null, null, null, %s)", [consent_id if known else None, str(e)])
-        return False, str(e)
+        return "REFUSED", str(e)
     db.execute("select prereg.record_write(%s, 'sent', 'add_label', null, null, null)", [consent_id])
     status, request_id, _ = transport.add_label(issue, label)
+    accepted = 200 <= status < 300
     db.execute("select prereg.record_write(%s, %s, 'add_label', %s, %s, null)",
-               [consent_id, "landed" if 200 <= status < 300 else "failed", status, request_id])
+               [consent_id, "landed" if accepted else "failed", status, request_id])
+    if not accepted:
+        return "FAILED", f"GitHub did not take the write (HTTP {status})"
     status, request_id, it = transport.read_issue(issue)
     there = label in [lab["name"] for lab in it.get("labels", [])]
     db.execute("select prereg.record_write(%s, 'read_back', 'read_issue', %s, %s, %s)",
                [consent_id, status, request_id, "the label is there" if there else "the label is missing"])
-    return there, f"the label {label} is on sandbox issue {issue}" if there else "the write did not land"
+    return ("LANDED", f"the label {label} is on sandbox issue {issue}") if there else ("UNVERIFIED", "the read-back does not show the label")
 
 
 def approvals_of(run_id, token):
@@ -113,9 +128,9 @@ def main():
     approvals = approvals_of(run_id, os.environ["GH_TOKEN"])
     transport = Transport(os.environ["PREREG_SANDBOX_WRITE"])
     with psycopg.connect(os.environ["GATEWAY_DB_URL"], autocommit=True) as db:  # gateway_svc: functions only
-        landed, reason = apply(db, consent_id, run_id, approvals, transport, side_door_labels(os.environ["GH_TOKEN"]))
-    print(f"gateway: {'LANDED' if landed else 'REFUSED'}: {reason}; {transport.writes} writes sent")
-    sys.exit(0 if landed else 1)
+        outcome, reason = apply(db, consent_id, run_id, approvals, transport, side_door_labels(os.environ["GH_TOKEN"]))
+    print(f"gateway: {outcome}: {reason}; {transport.writes} writes sent")
+    sys.exit(0 if outcome == "LANDED" else 1)
 
 
 if __name__ == "__main__":

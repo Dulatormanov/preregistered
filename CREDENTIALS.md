@@ -30,13 +30,13 @@ A run that needs the write token is always started by `dispatch.yml`, so its tri
 
 ## The governed write (Build day 6)
 
-Every promotion run (`promote.yml`, started through `dispatch.yml`) ends with the live probes of `probes/probe.py gateway`, on the sandbox's probe issue and the side-door target (sandbox issue 25). The apply job is the one named job that uses the write token directly, outside the gateway: to show what the token itself can do, and to undo it at once.
+Every promotion run (`promote.yml`, started through `dispatch.yml`) ends with the live probes of `probes/probe.py gateway`, on the sandbox's probe issue and the side-door target (sandbox issue 25). The apply job is the one named job that uses the write token directly, outside the gateway: to show what the token itself can do, and to undo it at once. Each undo runs whatever happens, its result is a row of its own, and both issues must read back as they began. The side door counts only if this run's label closed the issue; a target that starts closed or labelled is an ERROR, never a LANDED.
 
 | Probe | Want | Result |
 |---|---|---|
 | the gateway is asked to assign, close and set a milestone | REFUSED, and the issue reads back unchanged | pending: the first promotion run |
 | the write token assigns the owner directly | LANDED, then removed | pending |
-| the write token adds `probe-side-door` directly | LANDED: side_door_demo.yml closes the issue (reopened) | pending |
+| the write token adds `probe-side-door` directly | LANDED: side_door_demo.yml closes the issue after this label (then reopened, checked) | pending |
 | the gateway is asked to add `probe-side-door` | REFUSED | pending |
 
 - **Check 15:** issue types and issue fields do not exist in this personal sandbox repo (checked on 2026-11-05: GraphQL `issueTypes` is null for a user's repo, and no issue has a type or a field). The gateway refuses both anyway: its one payload shape has no such keys.

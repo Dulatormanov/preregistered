@@ -1,5 +1,6 @@
 """The gateway's enforcement (gateway/, db/013_consent.sql) on the test database, with a fake GitHub transport:
-18 hostile requests are refused with zero write calls, one approved bundle lands once, and the database itself
+19 hostile requests are refused with zero write calls (the plan's 18, and a label that is already there), a write
+that GitHub refuses is FAILED and never LANDED, one approved bundle lands once, and the database itself
 keeps the rules: one approval used once, only for the exact hash, no write logged without a claim.
 
   PREREG_TEST_ADMIN_URL=... python tests/test_enforcement.py
@@ -25,13 +26,14 @@ DOORS = {"probe-side-door"}
 
 
 class FakeTransport:
-    def __init__(self):
-        self.writes, self.labels = 0, []
+    def __init__(self, labels=(), status=200):
+        self.writes, self.labels, self.status = 0, list(labels), status
 
     def add_label(self, issue, label):
         self.writes += 1
-        self.labels.append(label)
-        return 200, "req_add", {}
+        if 200 <= self.status < 300:
+            self.labels.append(label)
+        return self.status, "req_add", {}
 
     def remove_label(self, issue, label):
         self.writes += 1
@@ -72,12 +74,12 @@ def main():
 
         days = itertools.count(1)
 
-        def ask(payload, approvals=None, digest=None, synthetic=True):
+        def ask(payload, approvals=None, digest=None, synthetic=True, t=None):
             n = next(days)
             consent = bundle(a, n, payload, digest, synthetic)
-            t = FakeTransport()
-            landed, reason = gateway.apply(g, consent, f"run-{n}", approvals or approval(digest or sha(payload)), t, DOORS)
-            return landed, reason, t.writes, consent
+            t = t or FakeTransport()
+            outcome, reason = gateway.apply(g, consent, f"run-{n}", approvals or approval(digest or sha(payload)), t, DOORS)
+            return outcome == "LANDED", reason, t.writes, consent
 
         def shaped(**extra):  # a canonical payload with more fields than the one shape allows
             return json.dumps({"issue": TARGET, "label": "frontend", "repo": SANDBOX, **extra}, sort_keys=True,
@@ -110,17 +112,24 @@ def main():
             assert not landed and writes == 0, (name, reason)
             refused += 1
 
+        landed, reason, writes, _ = ask(good, t=FakeTransport(labels=["frontend"]))  # it is there already
+        assert not landed and writes == 0 and "already has" in reason, reason
+        refused += 1
+        rejected = FakeTransport(status=403)  # GitHub refuses the write: FAILED, never LANDED, and logged as sent
+        outcome = gateway.apply(g, bundle(a, 97, good), "run-403", approval(sha(good)), rejected, DOORS)
+        assert outcome[0] == "FAILED" and rejected.writes == 1, outcome
+
         landed, reason, writes, consent = ask(good)  # the one approved bundle lands, once
         assert landed and writes == 1, reason
         t = FakeTransport()
         again = gateway.apply(g, consent, "run-again", approval(sha(good)), t, DOORS)  # the same approval twice
-        assert again[0] is False and "already used" in again[1] and t.writes == 0
+        assert again[0] == "REFUSED" and "already used" in again[1] and t.writes == 0
         refused += 1
         owner(a, "select prereg.set_switch(false, 'test: the owner pulls the switch')")
         landed, reason, writes, _ = ask(canonical(23, "self-hosted"))
         assert not landed and writes == 0 and "kill switch" in reason
         refused += 1
-        assert refused == 18, refused
+        assert refused == 19, refused
         steps = [s for (s,) in a.execute("select step from prereg.writes where consent_id = %s order by id",
                                          [consent]).fetchall()]
 
@@ -151,7 +160,9 @@ def main():
     assert steps == ["sent", "landed", "read_back", "refused"], steps
     # The plan job's choices: one synthetic target a day in turn, and no demoted area.
     from gateway.propose import choose, demoted
-    assert choose([1, 2, 3], date(2026, 11, 5)) != choose([1, 2, 3], date(2026, 11, 6))
+    targets = [{"issue": n} for n in (22, 23, 24)]
+    assert choose(targets, date(2026, 11, 5)) != choose(targets, date(2026, 11, 6))
+    assert choose(targets, date(2026, 11, 5), {22, 23}) == {"issue": 24} and choose(targets, date(2026, 11, 5), {22, 23, 24}) is None
     assert not demoted({"frontend": (20, 10)}, "frontend")  # the upper Wilson end is 0.70: still above the bar
     assert demoted({"frontend": (20, 5)}, "frontend") and not demoted({}, "auth")  # 0.47; and no live record yet
     print(f"ok: {refused} hostile requests refused with zero write calls; one approved bundle landed once;"
