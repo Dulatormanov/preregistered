@@ -126,10 +126,16 @@ def main():
                  for m in (4, 19, 34, 49)] for name, first, every in WORKFLOWS}  # the slot at each minute cron runs it
     assert at == {"tick.yml": ["09:52", "10:07", "10:22", "10:37"],  # 12 minutes into each tick slot
                   "watchdog.yml": ["09:41", "10:11", "10:11", "10:41"],  # 8 and 23 minutes into a watchdog slot
-                  "watch.yml": ["09:41", "09:41", "09:41", "10:41"]}, at  # from 8 minutes into a watcher slot
-    jobs = {"tick.yml": TICK, "watchdog.yml": {"cadence_min": watchdog.EVERY_MIN, "at_minute": 11}, "watch.yml": WATCH}
+                  "watch.yml": ["09:41", "09:41", "09:41", "10:41"],  # from 8 minutes into a watcher slot
+                  **{name: [hhmm] * 4 for name, hhmm in (("reveal.yml", "04:17"), ("drift.yml", "05:31"),
+                                                         ("outcomes.yml", "06:13"), ("sealed.yml", "07:47"))}}, at
+    day = [slot(datetime(2026, 11, 6, 4, m, 30, tzinfo=timezone.utc), 257, 1440) for m in (4, 19)]  # reveal, at 04:17
+    assert day == [datetime(2026, 11, 5, 4, 17, tzinfo=timezone.utc), datetime(2026, 11, 6, 4, 17, tzinfo=timezone.utc)]
+    registry = tomllib.loads((ROOT / "agents/registry.toml").read_text())["job"]
+    jobs = {"tick.yml": TICK, "watchdog.yml": {"cadence_min": watchdog.EVERY_MIN, "at_minute": 11},
+            **{j["evidence"][4:]: j for j in registry if j.get("evidence", "").startswith("run:")}}
     assert all(slot(t, first, every) == watchdog.slot_of(jobs[name], t) for name, first, every in WORKFLOWS
-               for t in (NOW, NOW + timedelta(minutes=7)))
+               for t in (NOW, NOW + timedelta(minutes=7), NOW + timedelta(hours=13)))  # each job's registry slots
     from ops import open_alerts  # with this alert type's 6-hour budget spent, only a new incident goes out
     calls, real_run = [], subprocess.run
     subprocess.run = lambda args, **kw: calls.append(args[:3]) or subprocess.CompletedProcess(args, 0, stdout="[]")
