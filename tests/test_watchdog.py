@@ -44,10 +44,11 @@ def fake_gh(fail_upstream=False, runs=()):  # runs: (workflow file, event, start
     return gh
 
 
-def polled(t, slot, saw_upstream=True, trigger="schedule"):  # the backup clock starts its ticks 12 minutes in
-    start = (slot + timedelta(minutes=9 if trigger == "schedule" else 12)).isoformat()
+def polled(t, slot, saw_upstream=True, trigger="schedule", planned=None):  # the backup clock starts its ticks 12
+    start = (slot + timedelta(minutes=9 if trigger == "schedule" else 12)).isoformat()  # minutes in
     t.execute("select prereg.log_event('polled', %s)", [Jsonb({
-        "trigger": trigger, "planned_start": slot.isoformat() if trigger == "schedule" else start, "actual_start": start,
+        "trigger": trigger, "planned_start": (planned or slot).isoformat() if trigger == "schedule" else start,
+        "actual_start": start,
         "http_status": 200, "lost": 0, "token_expires": f"{NOW + timedelta(days=3):%Y-%m-%d %H:%M:%S} UTC",
         "champion": {"guessed": 1, "errors": 0}, **({"newest_upstream": 777003} if saw_upstream else {})})])
 
@@ -144,6 +145,16 @@ def main():
             **{j["evidence"][4:]: j for j in registry if j.get("evidence", "").startswith("run:")}}
     assert all(slot(t, first, every) == watchdog.slot_of(jobs[name], t) for name, first, every in WORKFLOWS
                for t in (NOW, NOW + timedelta(minutes=7), NOW + timedelta(hours=13)))  # each job's registry slots
+    with psycopg.connect(admin_url(), autocommit=True) as a:  # Nov 6: GitHub's schedule started the 10:37 tick at
+        a.execute("set role prereg_owner")  # 11:25, so the backup clock started none for the 11:22 slot
+        a.execute("delete from prereg.run_events where kind = 'polled'")
+    with psycopg.connect(role_url("triage_agent"), autocommit=True) as t:  # every slot's only tick: a scheduled one,
+        for i in range(8):  # planned 3 slots before the one it started in
+            polled(t, last - timedelta(minutes=15 * i), planned=last - timedelta(minutes=15 * (i + 3)))
+    entry = next(j for j in registry if j["id"] == "tick/poll")
+    with psycopg.connect(role_url("observer"), autocommit=True) as o:
+        runs = watchdog.evidence(o, entry, NOW - timedelta(hours=4), "token")
+    assert len(runs) == 8 and not watchdog.slot_alert(entry, runs, NOW), runs  # each serves the slot it started in
     from ops import open_alerts  # with this alert type's 6-hour budget spent, only a new incident goes out
     calls, real_run = [], subprocess.run
     subprocess.run = lambda args, **kw: calls.append(args[:3]) or subprocess.CompletedProcess(args, 0, stdout="[]")
