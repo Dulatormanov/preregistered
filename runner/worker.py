@@ -45,7 +45,7 @@ def run(db, read_issue, listed, cfg, client=None):
     if client is None:
         if not os.environ.get("ANTHROPIC_API_KEY"):
             raise SystemExit("ANTHROPIC_API_KEY is not set")
-        client = anthropic.Anthropic(max_retries=0, timeout=60)  # note: the next tick is the retry
+        client = anthropic.Anthropic(base_url="http://127.0.0.1:9", max_retries=0, timeout=60)  # GD2 (GAME_DAYS.md): the provider unreachable; never merged
     t0, calls, run_id = time.monotonic(), 0, os.environ.get("GITHUB_RUN_ID", "local")  # the probe counts too
     n = {"guessed": 0, "refused": 0, "invalid": 0, "errors": 0, "gone": 0, "unreachable": 0, "other_champion": 0,
          "capped": False, "out_of_time": False, "breaker": "closed", "cost_usd": 0.0}
