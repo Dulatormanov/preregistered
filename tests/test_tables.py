@@ -28,10 +28,10 @@ def rules(name):
 
 def main():
     guesses = {1: ("auth", 0), 2: ("frontend", 0), 3: ("frontend", 0), 4: ("auth", 0)}
-    assert score(guesses, ROWS, rules("pre-registered rule")) == (3, 3, 3)  # issue 4 is not scorable
-    assert score(guesses, ROWS, rules("labels within 7 days")) == (2, 2, 2)  # issue 2's label comes too late
-    assert score(guesses, ROWS, rules("bot and agent labels count")) == (3, 3, 2)  # issue 3 becomes auth: wrong
-    assert score(guesses, ROWS, rules("the author's template labels count")) == (4, 4, 4)
+    assert score(guesses, ROWS, rules("pre-registered rule")) == (2, 2, 2)  # issue 2's label (day 10) is too late
+    assert score(guesses, ROWS, rules("labels within 14 days (v1's rule)")) == (3, 3, 3)  # issue 4 is not scorable
+    assert score(guesses, ROWS, rules("bot and agent labels count")) == (2, 2, 1)  # issue 3 becomes auth: wrong
+    assert score(guesses, ROWS, rules("the author's template labels count")) == (3, 3, 3)  # issue 4 counts
     # The time rule: a guess anchored after the first counting label does not count.
     key = json.dumps(rules("pre-registered rule"), sort_keys=True)
     late = [dict(ROWS[0], first_label_s={key: 2 * DAY})]

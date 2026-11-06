@@ -1,10 +1,10 @@
-# rules/ground_truth.toml: what counts as the truth for a guess. PREREGISTRATION.md v1 fixes these values.
+# rules/ground_truth.toml: what counts as the truth for a guess. PREREGISTRATION.md v1 and its deviation 1 (DEVIATIONS.md) fix these values.
 # A label counts if it maps to an area below, was added within window_days of the issue's creation,
 # and was added by a human who is not the issue's author. The switches change one rule at a time for
 # the sensitivity table; the defaults are the pre-registered rule.
-version = 1
+version = 2
 
-window_days = 14            # switches: 7, 14, 28
+window_days = 7             # switches: 7, 14, 28 (v1, 2026-11-05: 14)
 template_labels = "out"     # labels added by the issue's author at creation (issue forms); switch: "in"
 agent_labels = "out"        # labels added by bots or agents; switch: "in"
 pool_rare = true            # areas not listed below count as "other"; switch: false (they are dropped)

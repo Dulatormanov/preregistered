@@ -67,7 +67,7 @@ def agreement_line(so_far):
     """One line: the live window so far, under the pre-registered rule, as `make tables` scores it."""
     parts = [f"{series} {matched} of {counting} counting guesses right ({scorable} scorable)"
              for series, counting, matched, scorable in so_far]
-    return "Live window so far (labels still arrive for 14 days): " + "; ".join(parts) + "."
+    return "Live window so far (labels still arrive for 7 days): " + "; ".join(parts) + "."
 
 
 def render(start, rows, runs, so_far=()):

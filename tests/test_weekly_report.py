@@ -75,10 +75,10 @@ def main():
     assert (week["tick_runs"], week["missed_slots"], week["champion_guesses"], week["dead_letters"]) == (101, 96 * 7 - 2, 1, 1)
     assert week["live_window"]["champion"] == {"counting_guesses": 4, "right": 3, "scorable": 5}
 
-    # The live window so far is the window's issues only (Nov 14 to Dec 4), scored as `make tables` does. 9903 is
-    # in it; 9904 (Nov 10) shares its Monday week but not the window; 9905 is after it. The numbers are plain ints.
+    # The live window so far is the window's issues only (Nov 7 to Nov 13, deviation 1 in DEVIATIONS.md), scored as `make
+    # tables` does. 9903 is in it; 9904 (Nov 14) shares its Monday week but not the window; 9905 is before it.
     with psycopg.connect(role_url("triage_agent"), autocommit=True) as t:
-        for n, created in ((9903, "2026-11-20 12:00+00"), (9904, "2026-11-10 12:00+00"), (9905, "2026-12-06 12:00+00")):
+        for n, created in ((9903, "2026-11-10 12:00+00"), (9904, "2026-11-14 12:00+00"), (9905, "2026-11-06 12:00+00")):
             t.execute("select prereg.enqueue_issue(%s, %s, 'h', '{}', 'haiku55-p2', %s)",
                       [n, created, Jsonb({"area": "other", "needs_details": False, "input_sha256": "h"})])
             attempt = t.execute("select * from prereg.claim_next(30, 'test')").fetchone()[0]
@@ -88,7 +88,7 @@ def main():
         n.execute("select prereg.record_anchor('canon=v1 kind=rows upto=8 n=6 rows=y', 'chain-y', 8, 2,"
                   " timestamptz '2026-11-06 00:00+00')")  # its time only has to come before each label
     with psycopg.connect(role_url("collector"), autocommit=True) as k:
-        for n, at in ((9903, "2026-11-21 12:00+00"), (9904, "2026-11-11 12:00+00"), (9905, "2026-12-07 12:00+00")):
+        for n, at in ((9903, "2026-11-11 12:00+00"), (9904, "2026-11-15 12:00+00"), (9905, "2026-11-06 18:00+00")):
             k.execute("select prereg.record_outcome(%s, %s, 'auth', 'add', 'User', false, %s)", [n, f"w{n}", at])
     from tools import readme_numbers
     from tools.tables import window_so_far

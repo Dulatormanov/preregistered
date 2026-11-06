@@ -2,9 +2,9 @@
 read-only token: the revealed guesses and anchors on the data branch, and the public label events of those issues.
 
   GH_TOKEN=... python tools/public_tables.py DATA_DIR
-It applies the pre-registered rule (rules/ground_truth.toml v1) and the time rule (a guess counts only if its anchor
+It applies the pre-registered rule (rules/ground_truth.toml v2) and the time rule (a guess counts only if its anchor
 came before the first counting label), with the same scoring as make tables, and prints agreement and coverage per
-series. Only guesses at least 14 days old are revealed, so the newest issues are not in it yet. Counts only.
+series. Only guesses at least 7 days old are revealed, so the newest issues are not in it yet. Counts only.
 """
 import json
 import os

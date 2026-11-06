@@ -57,12 +57,12 @@ def main():
     sealed.read, anthropic.Anthropic = fake_read, FakeClaude
     sealed.OUT = Path(tempfile.mkdtemp()) / "sealed.json"
 
-    assert sealed.main(now=datetime(2026, 11, 15, 23, 59, tzinfo=timezone.utc)) is False  # labels not final yet
+    assert sealed.main(now=datetime(2026, 11, 7, 23, 59, tzinfo=timezone.utc)) is False  # labels not final yet
     assert not sealed.OUT.exists()
     real = champion.load()  # the test runs on any models.lock, the rollback drill's included
     champion.load = lambda: {**real, "c": {**real["c"], "id": "haiku55-p2-drill"}}
     try:
-        sealed.main(now=datetime(2026, 11, 16, tzinfo=timezone.utc))
+        sealed.main(now=datetime(2026, 11, 8, tzinfo=timezone.utc))
         raise AssertionError("the sealed run ran on a champion that PREREGISTRATION.md does not name")
     except SystemExit:
         pass
@@ -71,7 +71,7 @@ def main():
     sealed.WAITS = (0, 0)  # the retries, without the real waits
     FAIL[0] = 30  # an outage: the 10 issues after the 2 changed ones get 3 failed calls each
     try:
-        sealed.main(now=datetime(2026, 11, 16, tzinfo=timezone.utc))
+        sealed.main(now=datetime(2026, 11, 8, tzinfo=timezone.utc))
         raise AssertionError("a sealed run with API errors finished")
     except SystemExit as e:
         assert "10 issues got only API errors" in str(e), e
@@ -103,7 +103,7 @@ def main():
             raise AssertionError("an API error was saved as a sealed guess")
         except psycopg.errors.CheckViolation:
             pass
-    print("ok: the sealed run waits for 2026-11-16, refuses another champion, leaves out changed issues, saves no API"
+    print("ok: the sealed run waits for 2026-11-08, refuses another champion, leaves out changed issues, saves no API"
           " error, finishes after an outage, runs once, and writes counts only")
 
 

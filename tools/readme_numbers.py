@@ -34,15 +34,15 @@ def block(db):
     lines = [f"Numbers as of {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC, from the ledger:",
              f"- {seen} issues seen; {champion} champion guesses and {baseline} baseline guesses, under {anchors} anchors"
              f" on the Notary log;",
-             f"- {ticks} ticks, {scheduled} of them started by GitHub's schedule; model spend ${float(spend):.4f} in all;",
+             f"- {ticks} ticks, {scheduled} of them started by GitHub's schedule; their model calls cost ${float(spend):.4f};",
              f"- the dev set (186 issues, the 5 A/A runs at commit {floor['commit'][:7]}): agreement"
              f" {min(floor['agreement']):.1%} to {max(floor['agreement']):.1%};",
-             "- the live window (issues created from 2026-11-14 to 2026-12-04): " + ("; ".join(
+             "- the live window (issues created from 2026-11-07 to 2026-11-13): " + ("; ".join(
                  f"{series} {matched} of {counting} counting guesses right ({scorable} scorable)"
                  for series, counting, matched, scorable in live) or "no scorable issue yet") + ";",
              "- the sealed set: " + (f"agreement {json.loads(sealed.read_text())['agreement']:.1%}, promoted: "
                                      f"{', '.join(json.loads(sealed.read_text())['promoted']) or 'none'}"
-                                     if sealed.exists() else "scored once, on or after 2026-11-16") + "."]
+                                     if sealed.exists() else "scored once, on or after 2026-11-08") + "."]
     return "\n".join(lines)
 
 

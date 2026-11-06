@@ -31,3 +31,7 @@ The rules are in `rules/ground_truth.toml` and the code is in `golden/truth.py`.
 - **The same rule in three places, kept equal.** `golden/truth.py` scores the dev and sealed sets; `prereg.v_truth` (`db/012_value_views.sql`) applies the rule in SQL for the value views, with the mapping copied from `rules/ground_truth.toml` v1 into `prereg.label_areas`; and `tools/public_tables.py` applies it to GitHub's public label events, for anyone. `tests/test_tables.py` and `tests/test_views.py` check that each one counts what the rule says.
 - **The time rule is part of the live score:** a guess counts only if the anchor that covers it was posted before the issue's first counting label.
 - **Anyone can recompute it.** Fourteen days after a guess is saved, `notary/reveal.py` publishes it on the `data` branch. `make verify` recomputes every anchor from that copy, and `make tables-public` scores it from the public label events, with a read-only token.
+
+## Update, 2026-11-06: 7 days
+
+Deviation 1 (DEVIATIONS.md) moved the counting period from 14 days to 7, one of the switches v1 already listed, for the live score and the sealed score, so both finish sooner: the live window is now issues created Nov 7 to Nov 13, and the sealed set is scored on or after Nov 8. `rules/ground_truth.toml` (version 2), `prereg.v_truth` (`db/017_deviation_1.sql`) and the reveal moved together. The dev set's truth, which the eval gate uses, was built with 14 days and stays as it is.
