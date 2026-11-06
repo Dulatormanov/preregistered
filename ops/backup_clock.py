@@ -1,11 +1,14 @@
 """The backup clock (ADR-001): cron on the owner's server runs this 12 minutes after each tick slot.
 
   4,19,34,49 * * * * /usr/bin/python3 ~/prereg/backup_clock.py >> ~/prereg/backup_clock.log 2>&1
-It covers the tick, the watchdog and the model watcher. If no run of a workflow was created since its current slot
-began, it starts one (workflow_dispatch), so the run is still a public GitHub Actions run. The token in ./token,
+It covers the tick, the watchdog, the model watcher and the four daily jobs (agents/registry.toml has their
+slots). If no run of a workflow was created since its current slot began, it starts one (workflow_dispatch), so the
+run is still a public GitHub Actions run. The token in ./token,
 next to the script, is fine-grained: Actions read and write, on this repo only (CREDENTIALS.md). A duplicate run is
-harmless: the ledger keeps one first sight per issue and per model, and an alert type gets at most one issue or
-comment per 6 hours. Standard library only, because the server has no packages for it.
+harmless: the ledger keeps one first sight per issue and per model, an alert repeat gets at most one issue or
+comment per 6 hours, and each daily job queues behind its own concurrency group and skips work already done. A
+copy of this file must compile before cron runs it (python3 -m py_compile): a script that does not compile starts
+nothing. Standard library only, because the server has no packages for it.
 """
 import json
 import urllib.request
@@ -13,14 +16,17 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 API = "https://api.github.com/repos/Dulatormanov/preregistered/actions/workflows"
-WORKFLOWS = [("tick.yml", 7, 15), ("watchdog.yml", 11, 30), ("watch.yml", 41, 60)]  # file, first minute, period
+EPOCH = datetime(2026, 11, 2, tzinfo=timezone.utc)  # a Monday, as in ops/watchdog.py
+WORKFLOWS = [("tick.yml", 7, 15), ("watchdog.yml", 11, 30), ("watch.yml", 41, 60),  # file, first minute, period
+             ("reveal.yml", 257, 1440), ("drift.yml", 331, 1440), ("outcomes.yml", 373, 1440),  # daily: 04:17, 05:31,
+             ("sealed.yml", 467, 1440)]  # 06:13 and 07:47 UTC
 
 
 def slot(now, first=7, every=15):
-    """The slot a time falls in, when slots start at minute `first` of the hour and then every `every` minutes.
-    The defaults are tick.yml's slots: minutes 7, 22, 37 and 52."""
-    # note: it counts minutes of the hour, so it is right only when every divides 60
-    return now.replace(second=0, microsecond=0) - timedelta(minutes=(now.minute - first) % every)
+    """The slot a time falls in: slots start `first` minutes after the epoch, then every `every` minutes, as the
+    watchdog's slot_of counts them. The defaults are tick.yml's slots: minutes 7, 22, 37 and 52 of each hour."""
+    minutes = (now - EPOCH) // timedelta(minutes=1) - first
+    return EPOCH + timedelta(minutes=first + minutes // every * every)
 
 
 def main():

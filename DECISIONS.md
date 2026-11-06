@@ -2,6 +2,16 @@
 
 Newest first. Each entry says what was decided and why.
 
+## 2026-11-06
+
+- **A game-day edit stopped the backup clock for 15 h 41 min, with the read token broken.** For GD3's second half, the silent success, the read token was made invalid at 15:31 UTC on Nov 5, and the server's copy of the backup clock was edited by hand to start ticks from the `gd3-silent` branch. The edit did not compile, so from 15:34 the clock started nothing, and the token stayed broken until 07:15 on Nov 6.
+  - GitHub's schedule started 12 ticks in that time, and all failed loudly on the token. The watchdog ran only 3 times, also by GitHub's schedule.
+  - The alerts went out: a failed-run email for each tick, Healthchecks `tick` DOWN at 16:04 (45 minutes after the last good tick) and `watchdog` DOWN at 16:19, a watchdog comment at 18:41, and `missed:watch/watch` at 23:50. Nobody acted on them until 07:15.
+  - One upstream issue came at 16:45. It was first seen at 07:16, after maintainers had labelled it, so its guess was saved with those labels; it is before the live window anyway. 0 guesses lost.
+  - The silent-success variant never ran, so GD3 stays open (GAME_DAYS.md).
+  - What changed: the server's copy is only ever copied from `ops/backup_clock.py` and compiled (ADR-001); a game day that breaks something starts a timer that undoes it by itself; and the backup clock now covers the daily jobs (next entry).
+- **The backup clock covers the four daily jobs** (ADR-001 update, `ops/backup_clock.py`): the reveal, the drift check, the outcome collector and the sealed run. GitHub's schedule ran the drift check 8 hours late on Nov 5, and started none of the reveal, the drift check and the collector on Nov 6, so those three were started by hand at 07:18. The clock's slots now count from the watchdog's epoch, so daily slots work; `tests/test_watchdog.py` checks that every slot it uses is the registry's. The Monday jobs come next, before Nov 9.
+
 ## 2026-11-05 (Build day 8, started early)
 
 - **A new incident is never budgeted** (ADR-008 update, `ops/watchdog.py`, `ops/open_alerts.py`). The contact budget allowed one message per alert type per 6-hour window, so after the 13:19 UTC issue for missed ticks, a second outage before 18:00 would have been logged and sent to nobody. Now a slot alert that was not on at the watchdog's last run is new, and always goes out; repeats stay capped. Found while planning the silent-success half of GD3; `tests/test_watchdog.py` checks both cases.
