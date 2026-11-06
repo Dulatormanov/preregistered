@@ -30,6 +30,6 @@ Every job logs in to Postgres as its own role and writes only through functions 
 
 ## Check it yourself
 
-From a clean clone, with a read-only GitHub token: `make verify` recomputes every anchor from the public `data` branch, the Notary log and git, and `make tables-public` scores the revealed guesses from GitHub's public label events. Guesses go public 7 days after they are saved.
+From a clean clone, with a read-only GitHub token: `make verify` recomputes every anchor from the public `data` branch, the Notary log and git, and `make tables-public` scores the revealed guesses from GitHub's public label events. Guesses go public 7 days after they are saved, and from Nov 21, when the window's labels are final, the reveal job puts the final report on the `data` branch (`reports/final.md`).
 
 The decisions, day by day, are in [`DECISIONS.md`](DECISIONS.md), and what was harder than it should be in [`FRICTION_LOG.md`](FRICTION_LOG.md).

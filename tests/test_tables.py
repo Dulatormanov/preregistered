@@ -37,6 +37,23 @@ def main():
     late = [dict(ROWS[0], first_label_s={key: 2 * DAY})]
     assert score({1: ("auth", 3 * DAY)}, late, rules("pre-registered rule")) == (1, 0, 0)
     assert score({1: ("auth", DAY)}, late, rules("pre-registered rule")) == (1, 1, 1)
+    from datetime import datetime, timezone  # the final report (tools/final_report.py), on public-style rows
+    from tools import final_report
+    key = json.dumps(rules("pre-registered rule"), sort_keys=True)
+    window = {r["number"]: dict(r, first_label_s={key: s}) for r, s in (
+        ({"number": 1, "label_events": [event("auth", 2 * DAY)]}, 2 * DAY),
+        ({"number": 2, "label_events": []}, float("inf")),  # never labelled: not scorable
+        ({"number": 3, "label_events": [event("studio", DAY), event("awaiting-details", DAY)]}, DAY),
+        ({"number": 4, "label_events": [event("auth", 10 * DAY)]}, float("inf")))}  # too late for 7 days
+    series = {"champion": {1: ("auth", 60, False), 3: ("frontend", 120, True), 4: ("auth", 60, False)},
+              "baseline": {1: ("other", 60, False)}}
+    text = final_report.report(window, series, 9, {"agreement": 0.8, "promoted": ["auth"]},
+                               datetime(2026, 11, 21, 4, 17, tzinfo=timezone.utc))
+    assert "4, of which 2 are scorable" in text, text
+    assert "| champion | 2 of 2, 100.0% (34.2% to 100.0%) | 2 of 2, 100% | 2 of 2 |" in text, text
+    assert "| baseline | 0 of 1, 0.0% (0.0% to 79.3%) | 1 of 2, 50% | 1 of 1 |" in text, text
+    assert "agreement 80.0%; promoted areas: auth." in text and "within 7 days" in text, text
+    assert final_report.FINAL == datetime(2026, 11, 21, tzinfo=timezone.utc)
     assert cell(4, 2, 1, coverage=True) == "50.0% of 2, coverage 50%" and cell(0, 0, 0) == "none scorable yet"
     print("ok: each ground-truth switch changes what is scorable as it should, and the time rule holds")
 

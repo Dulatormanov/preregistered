@@ -1,8 +1,9 @@
 name: reveal
 
-# The rolling reveal (notary/reveal.py), daily: the guesses saved 14 or more days ago, and every anchor, go to the data
+# The rolling reveal (notary/reveal.py), daily: the guesses saved 7 or more days ago, and every anchor, go to the data
 # branch. Then notary/verify.py recomputes every anchor from that public copy, the Notary log and git, as anyone could.
-# If the verifier fails, the alert job opens an issue.
+# If the verifier fails, the alert job opens an issue. From Nov 21, when the window's labels are final, a verified run
+# also puts the final report (tools/final_report.py) on the data branch, once.
 on:
   schedule:
     - cron: "17 4 * * *"
@@ -45,13 +46,27 @@ jobs:
           cd data-branch
           git add guesses.jsonl anchors.jsonl
           if git diff --cached --quiet; then echo "reveal: nothing new"; exit 0; fi
-          git commit -q -m "Reveal: the guesses saved 14 or more days ago, and every anchor"
+          git commit -q -m "Reveal: the guesses saved 7 or more days ago, and every anchor"
           git push -q "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPO}.git" HEAD:data
       - id: verify
         run: |
           if .venv/bin/python -m notary.verify data-out; then echo "verified=yes" >> "$GITHUB_OUTPUT"; else echo "verified=no" >> "$GITHUB_OUTPUT"; fi
         env:
           GH_TOKEN: ${{ github.token }}
+      - name: The final report, once, when the window's labels are final (tools/final_report.py)
+        if: steps.verify.outputs.verified == 'yes'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if [ -f data-branch/reports/final.md ]; then echo "final report: already on the data branch"; exit 0; fi
+          .venv/bin/python -m tools.final_report data-out data-branch
+          if [ ! -f data-branch/reports/final.md ]; then exit 0; fi
+          python3 scripts/lint_refs.py data-branch/reports/final.md  # every posted text passes the reference lint
+          cd data-branch
+          git add reports/final.md
+          git commit -q -m "The final report: the live window, from public data"
+          git push -q "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPO}.git" HEAD:data
 
   alert:
     needs: reveal
