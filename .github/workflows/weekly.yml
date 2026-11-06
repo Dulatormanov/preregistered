@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       post:
-        description: Post the report (off = build it and show it in the log only)
+        description: Post the report (off = build it and show it in the log only; a run with this off on a Monday from 07:23 to 11:23 UTC stops the backup clock from posting that week)
         type: boolean
         default: false
 
@@ -101,5 +101,11 @@ jobs:
           printf '%s' "$SUMMARY" > summary.txt
           .venv/bin/python -m agents.report_post report.md summary.txt week/data.json  # the four checks: summary or not
           python3 scripts/lint_refs.py report.md  # every posted text passes the reference lint
-          .venv/bin/python -c "import sys; from ops.notify import spend; sys.exit(0 if spend('weekly_report') else 'the contact budget refused a second weekly report this week (23505)')"
-          gh issue comment 2 --body-file report.md  # issue 2 is "Weekly reports (subscribe here)"
+          rc=0; .venv/bin/python -c "import sys; from ops.notify import spend; sys.exit(0 if spend('weekly_report') else 3)" || rc=$?
+          if [ "$rc" -eq 3 ]; then  # a second run this week, the backup clock's or GitHub's late one: still one report
+            echo "this week's report already went out (the contact budget, 23505), so this run posts nothing"
+          elif [ "$rc" -ne 0 ]; then
+            exit "$rc"  # any other failure fails the job
+          else
+            gh issue comment 2 --body-file report.md  # issue 2 is "Weekly reports (subscribe here)"
+          fi
