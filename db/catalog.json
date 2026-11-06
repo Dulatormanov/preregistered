@@ -1,5 +1,5 @@
 {
- "prereg.area_live_counts()": "980c51dcdbef753d4a45376e2395b0bf28401e04be2c280296122ec163f5b03e",
+ "prereg.area_live_counts()": "e695ccb6d42acf71c3c5fa469fb98526ced134e2783fb414163444b8136239d2",
  "prereg.claim_consent(bigint,text,text,text,text)": "57088b7d435a7c2954d09ed928ecdf27f78da23b8bab2ba0456da46bcda8942d",
  "prereg.claim_next(integer,text)": "21345f27b456184a288cba131963280938047e3a9080b83799a559373260dcda",
  "prereg.complete(bigint,text,text,boolean,text,jsonb)": "2bac972577ee869176be56fd056cd1149ea63c84a2b5cc793e24a5919db86295",

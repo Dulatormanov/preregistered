@@ -1,6 +1,7 @@
-"""The rolling reveal (Build day 8): every day, each guess saved 14 or more days ago goes public on the data branch,
+"""The rolling reveal (Build day 8): every day, each guess saved 7 or more days ago goes public on the data branch,
 so anyone can recompute every anchor from it with notary/verify.py. By then the issue's labels are in, so a published
-guess cannot help anyone label. Until then a guess is public only as part of an anchor's hash.
+guess cannot help anyone label: a label counts only within 7 days (deviation 1 in DEVIATIONS.md; v1 had 14 for both).
+Until then a guess is public only as part of an anchor's hash.
 
   OBSERVER_DB_URL=... python -m notary.reveal OUT_DIR
 It writes OUT_DIR/guesses.jsonl (one canonical row per line, notary/canonical.py's row_text, in id order) and
@@ -13,7 +14,7 @@ from pathlib import Path
 
 from notary.canonical import FIELDS, row_text
 
-AGE_DAYS = 14
+AGE_DAYS = 7
 
 
 def main():

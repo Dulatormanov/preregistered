@@ -20,8 +20,8 @@ sys.path.insert(0, str(ROOT))
 from golden.truth import RULES, counts_for, truth  # noqa: E402
 
 CHAMPION = "haiku55-p2"  # named in PREREGISTRATION.md v1; a drill or ADOPT champion is a series of its own
-WINDOW = (datetime(2026, 11, 14, tzinfo=timezone.utc), datetime(2026, 12, 5, tzinfo=timezone.utc))
-VARIANTS = [("pre-registered rule", {}), ("labels within 7 days", {"window_days": 7}),
+WINDOW = (datetime(2026, 11, 7, tzinfo=timezone.utc), datetime(2026, 11, 14, tzinfo=timezone.utc))  # deviation 1 (DEVIATIONS.md); v1: Nov 14 to Dec 4
+VARIANTS = [("pre-registered rule", {}), ("labels within 14 days (v1's rule)", {"window_days": 14}),
             ("labels within 28 days", {"window_days": 28}), ("the author's template labels count", {"template_labels": "in"}),
             ("bot and agent labels count", {"agent_labels": "in"}), ("rare areas dropped, not pooled", {"pool_rare": False})]
 

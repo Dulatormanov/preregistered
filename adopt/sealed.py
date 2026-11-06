@@ -1,7 +1,7 @@
 """The sealed score (Build day 4): the champion named in PREREGISTRATION.md v1 guesses the 151 sealed issues once.
 
   ADOPTER_DB_URL=... ANTHROPIC_API_KEY=... PREREG_READ_TOKEN=... python -m adopt.sealed
-1. It does nothing before 2026-11-16 00:00 UTC, when the sealed labels are final, or once every sealed issue has
+1. It does nothing before 2026-11-08 00:00 UTC, when the sealed labels are final (7 days after Oct 31: deviation 1 in DEVIATIONS.md; v1: Nov 16), or once every sealed issue has
    its one row in prereg.sealed_guesses.
 2. It reads each sealed issue (title, body, creation time, label events) with GraphQL. An issue that is gone, or whose
    text no longer has its hash in golden/v1/sealed_list.csv, gets a 'left_out' row.
@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FINAL = datetime(2026, 11, 16, tzinfo=timezone.utc)
+FINAL = datetime(2026, 11, 8, tzinfo=timezone.utc)
 CHAMPION = "haiku55-p2"  # named in PREREGISTRATION.md v1
 OUT = ROOT / "results/sealed.json"
 WAITS = (5, 20)  # seconds before each retry of an API error, as in gate/run_suite.py
@@ -62,7 +62,7 @@ def rows_of(db):
 
 
 def summary(rows, guesses):
-    """results/sealed.json: counts per area, under ground truth v1."""
+    """results/sealed.json: counts per area, under ground truth v2."""
     from adopt.stats import promoted, wilson
     from golden.truth import RULES, truth
     areas = {a: {"true": 0, "guessed": 0, "right": 0} for a in RULES["areas"]}
@@ -133,7 +133,7 @@ def main(now=None):
     kept = {n: rows[n] for n, (status, _) in done.items() if status != "left_out" and n in rows}
     guesses = {n: area for n, (_, area) in done.items() if area}
     result = {**summary(kept, guesses), "run_at": now.isoformat(timespec="seconds"), "issues": len(sealed),
-              "left_out": len(sealed) - len(kept), "rules": "rules/ground_truth.toml v1"}
+              "left_out": len(sealed) - len(kept), "rules": "rules/ground_truth.toml v2"}
     OUT.parent.mkdir(exist_ok=True)
     OUT.write_text(json.dumps(result, indent=1, sort_keys=True) + "\n")
     print(f"sealed: {result['answered']} of {result['scorable']} scorable issues answered, agreement"

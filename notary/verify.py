@@ -7,8 +7,8 @@ For every anchor, in order:
   text and chain equal the published anchor;
 - its chain links to the anchor before it (the first to GENESIS);
 - a rows anchor recomputes from the revealed rows in its id range: exactly n= of them, so an id the database
-  skipped is not a gap. If fewer are revealed while the anchor is under 16 days old (the reveal publishes rows
-  14 days old, daily, and may miss a run), it is "waiting", which is not a failure; after that it is a problem;
+  skipped is not a gap. If fewer are revealed while the anchor is under 9 days old (the reveal publishes rows
+  7 days old, daily, and may miss a run), it is "waiting", which is not a failure; after that it is a problem;
 - a file anchor matches the file in git at its commit.
 No anchor may be missing: the published list and the bot's comments must be the same, one for one. No revealed
 row may repeat an id, or lie outside every rows anchor's range.
@@ -26,7 +26,7 @@ from pathlib import Path
 from notary.canonical import GENESIS, chain, file_text, sha256
 
 ROOT = Path(__file__).resolve().parents[1]
-REVEAL_DAYS = 16  # every row of an anchor is revealed by then
+REVEAL_DAYS = 9  # every row of an anchor is revealed by then (v1: 16)
 QUERY = """query($cursor: String) { repository(owner: "Dulatormanov", name: "preregistered") { issue(number: 1) {
   comments(first: 100, after: $cursor) { pageInfo { hasNextPage endCursor }
     nodes { databaseId body createdAt lastEditedAt author { __typename login } } } } } }"""

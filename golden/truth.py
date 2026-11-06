@@ -56,7 +56,7 @@ def main():
         for r, (a, nd) in sorted(zip(dev, dev_truth), key=lambda x: x[0]["number"]) if a is not None))
     print("dev set:", json.dumps(counts))
     sealed_areas = [truth(r)[0] for r in sealed]
-    print("Check 12 (sealed set, labels not final until 2026-11-14):",
+    print("Check 12 (sealed set, labels not final until 2026-11-08):",
           ", ".join(f"{a}: {'enough' if sealed_areas.count(a) >= ENOUGH else 'not enough'}" for a in areas))
 
 

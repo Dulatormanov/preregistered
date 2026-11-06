@@ -1,7 +1,7 @@
 name: sealed
 
-# The sealed score (adopt/sealed.py, PREREGISTRATION.md v1): the champion guesses the 151 sealed issues once, on or
-# after 2026-11-16, when their labels are final. It checks every day; before that date, and after the one run, it does
+# The sealed score (adopt/sealed.py, PREREGISTRATION.md v1 and its deviation 1): the champion guesses the 151 sealed issues once, on or
+# after 2026-11-08, when their labels are final. It checks every day; before that date, and after the one run, it does
 # nothing. Then the open-pr job opens a pull request with results/sealed.json (counts only). GitHub starts no checks
 # for a pull request that GITHUB_TOKEN opened, so the owner closes and reopens it to run them, then merges it.
 on:

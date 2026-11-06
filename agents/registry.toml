@@ -265,7 +265,7 @@ secrets = ["NOTIFIER_DB_URL"]
 permissions = ["contents: read", "issues: write"]
 
 [[job]]
-id = "sealed/score"  # the one sealed run, on or after 2026-11-16; every other day it does nothing
+id = "sealed/score"  # the one sealed run, on or after 2026-11-08; every other day it does nothing
 owner = "Dulatormanov"
 tier = "ledger"
 autonomy = "read_report"
