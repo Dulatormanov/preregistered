@@ -4,12 +4,16 @@ read-only token: the revealed guesses and anchors on the data branch, and the pu
   GH_TOKEN=... python tools/public_tables.py DATA_DIR
 It applies the pre-registered rule (rules/ground_truth.toml v2) and the time rule (a guess counts only if its anchor
 came before the first counting label), with the same scoring as make tables, and prints agreement and coverage per
-series. Only guesses at least 7 days old are revealed, so the newest issues are not in it yet. Counts only.
+series. Every upstream issue created in the window counts, from GitHub's search, so an issue the clock never saw
+still lowers coverage. Only guesses at least 7 days old are revealed, so the newest issues are not in it yet.
+Counts only.
 """
 import json
 import os
 import sys
-from datetime import datetime
+import urllib.parse
+import urllib.request
+from datetime import datetime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,15 +26,33 @@ def utc(s):
     return datetime.fromisoformat(s.replace("Z", "+00:00"))
 
 
-def main():
+def window_numbers(token):
+    """Every upstream issue (not pull request) created in the window, whether or not the clock saw it."""
+    q = (f"repo:supabase/supabase is:issue created:{WINDOW[0]:%Y-%m-%d}..{WINDOW[1] - timedelta(days=1):%Y-%m-%d}")
+    numbers, page = [], 1
+    while True:
+        req = urllib.request.Request(f"https://api.github.com/search/issues?q={urllib.parse.quote(q)}&per_page=100&page={page}",
+                                     headers={"Authorization": f"Bearer {token}", "User-Agent": "preregistered",
+                                              "Accept": "application/vnd.github+json"})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            found = json.load(r)
+        if found.get("incomplete_results"):
+            raise SystemExit("GitHub's search returned incomplete results")  # never score on a partial list
+        numbers += [it["number"] for it in found["items"]]
+        if len(found["items"]) < 100:
+            return numbers
+        page += 1
+
+
+def public_window(data, token):
+    """(window rows by issue, {series: {issue: (area, seconds to its anchor)}}, guesses read) from public data."""
     from adopt.sealed import read
-    data = Path(sys.argv[1])
     guesses = [json.loads(line) for line in (data / "guesses.jsonl").read_text().splitlines()]
     anchors = [json.loads(line) for line in (data / "anchors.jsonl").read_text().splitlines()]
     rows_anchors = [a for a in anchors if a.get("upto_prediction_id")]
-    numbers, rows = sorted({g["issue_number"] for g in guesses}), {}
+    numbers, rows = sorted({g["issue_number"] for g in guesses} | set(window_numbers(token))), {}
     for i in range(0, len(numbers), 25):
-        rows.update(read(numbers[i:i + 25], os.environ["GH_TOKEN"]))
+        rows.update(read(numbers[i:i + 25], token))
     window = {n: r for n, r in rows.items() if WINDOW[0] <= utc(r["created_at"]) < WINDOW[1]}
     for r in window.values():  # the time rule, under each rule set: when the first counting label came
         r["first_label_s"] = {}
@@ -47,12 +69,18 @@ def main():
         if anchored is not None:
             created = utc(window[g["issue_number"]]["created_at"])
             series.setdefault(series_of(g["champion_id"]), {}).setdefault(
-                g["issue_number"], (g["area"], (anchored - created).total_seconds()))
+                g["issue_number"], (g["area"], (anchored - created).total_seconds(), g.get("needs_details")))
+    return window, series, len(guesses)
+
+
+def main():
+    window, series, read_n = public_window(Path(sys.argv[1]), os.environ["GH_TOKEN"])
     rules = dict(RULES)
     print("| Series | Live window, pre-registered rule |\n|---|---|")
     for name, gs in series.items():
         print(f"| {name} | {cell(*score(gs, list(window.values()), rules), coverage=True)} |")
-    print(f"\nFrom {len(guesses)} revealed guesses; issues created {WINDOW[0]:%Y-%m-%d} to {WINDOW[1]:%Y-%m-%d}, UTC.")
+    print(f"\nFrom {read_n} revealed guesses and {len(window)} window issues; issues created {WINDOW[0]:%Y-%m-%d}"
+          f" to {WINDOW[1] - timedelta(days=1):%Y-%m-%d}, UTC.")
 
 
 if __name__ == "__main__":
