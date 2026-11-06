@@ -101,8 +101,11 @@ def main():
     with psycopg.connect(role_url("observer"), autocommit=True) as o:  # off at the last run, so new
         assert watchdog.check(o, "token", NOW)["missed:tick/poll"].endswith(watchdog.NEW)
     suite = next(j for j in tomllib.loads((ROOT / "agents/registry.toml").read_text())["job"] if j["id"] == "suite/run")
-    watchdog.gh = fake_gh(runs=[("suite.yml", "workflow_dispatch", NOW - timedelta(hours=1))])
-    assert watchdog.evidence(None, suite, NOW - timedelta(days=8), "token") == []  # by hand: not the A/A pair
+    watchdog.gh = fake_gh(runs=[(f, event, NOW - timedelta(hours=1)) for f in ("suite.yml", "other.yml")
+                                for event in ("workflow_dispatch", "push")])
+    assert len(watchdog.evidence(None, suite, NOW - timedelta(days=8), "token")) == 1  # started, as the clock does
+    other = dict(suite, evidence="run:other.yml")  # a workflow the backup clock does not start: only its schedule
+    assert watchdog.evidence(None, other, NOW - timedelta(days=8), "token") == []  # and a push run never counts
     t1, t2 = NOW.replace(microsecond=0) - timedelta(hours=2), NOW.replace(microsecond=0) - timedelta(hours=1)
     watchdog.gh = fake_gh(runs=[("watch.yml", "schedule", t1), ("watch.yml", "workflow_dispatch", t2)])
     assert [started for _, started, _, _ in watchdog.evidence(None, WATCH, NOW - timedelta(days=1), "token")] == [
@@ -128,9 +131,14 @@ def main():
                   "watchdog.yml": ["09:41", "10:11", "10:11", "10:41"],  # 8 and 23 minutes into a watchdog slot
                   "watch.yml": ["09:41", "09:41", "09:41", "10:41"],  # from 8 minutes into a watcher slot
                   **{name: [hhmm] * 4 for name, hhmm in (("reveal.yml", "04:17"), ("drift.yml", "05:31"),
-                                                         ("outcomes.yml", "06:13"), ("sealed.yml", "07:47"))}}, at
+                                                         ("outcomes.yml", "06:13"), ("sealed.yml", "07:47"),
+                                                         ("suite.yml", "06:13"), ("known-bad-control.yml", "06:53"),
+                                                         ("weekly.yml", "07:23"))}}, at  # Monday Nov 2 for the last 3
     day = [slot(datetime(2026, 11, 6, 4, m, 30, tzinfo=timezone.utc), 257, 1440) for m in (4, 19)]  # reveal, at 04:17
     assert day == [datetime(2026, 11, 5, 4, 17, tzinfo=timezone.utc), datetime(2026, 11, 6, 4, 17, tzinfo=timezone.utc)]
+    from ops.backup_clock import INPUTS  # each input the clock sends is one its workflow takes
+    assert all(f"\n      {k}:\n" in (ROOT / ".github/workflows" / name).read_text() for name, given in INPUTS.items()
+               for k in given) and INPUTS.keys() <= {name for name, _, _ in WORKFLOWS}, INPUTS
     registry = tomllib.loads((ROOT / "agents/registry.toml").read_text())["job"]
     jobs = {"tick.yml": TICK, "watchdog.yml": {"cadence_min": watchdog.EVERY_MIN, "at_minute": 11},
             **{j["evidence"][4:]: j for j in registry if j.get("evidence", "").startswith("run:")}}

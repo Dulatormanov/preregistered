@@ -17,6 +17,10 @@ on:
         description: How many times to run the whole suite (5 for the A/A noise floor)
         type: number
         default: 1
+      scheduled:
+        description: Do what the Monday schedule does, the A/A pair (the backup clock sets this, ADR-001)
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -48,7 +52,7 @@ jobs:
           .venv/bin/python -m gate.noise_floor results.jsonl --compare gate/noise_floor.json > noise_floor.json
           cat noise_floor.json
         env:
-          RUNS: ${{ github.event_name == 'schedule' && 2 || inputs.runs || 5 }}  # a push: 5 runs, the A/A strength the gate needs
+          RUNS: ${{ (github.event_name == 'schedule' || inputs.scheduled) && 2 || inputs.runs || 5 }}  # a push: 5 runs, the A/A strength the gate needs
           GATE_DB_URL: ${{ secrets.GATE_DB_URL }}  # gate_runner: its own steps and spend only
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           PREREG_READ_TOKEN: ${{ secrets.PREREG_READ_TOKEN }}  # reads the dev-set issues
@@ -62,7 +66,7 @@ jobs:
 
   alert:
     needs: run
-    if: github.event_name == 'schedule' && needs.run.outputs.grew != ''
+    if: (github.event_name == 'schedule' || inputs.scheduled) && needs.run.outputs.grew != ''
     runs-on: ubuntu-24.04
     timeout-minutes: 3
     permissions:

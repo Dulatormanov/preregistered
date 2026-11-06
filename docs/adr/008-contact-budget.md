@@ -17,7 +17,7 @@ Option 2 (`db/014_contacts.sql`). `prereg.spend_contact(kind, topic)` inserts on
 
 - Every job that posts spends first, through `ops/notify.py`: the alert jobs, the weekly report's post job, and the plan job of `promote.yml` (the approval request).
 - The jobs that post log in as `notifier`, which can call `spend_contact` and nothing else, not even read a table.
-- An alert over its budget is skipped and logged in the job's output. A second weekly report fails its job.
+- An alert over its budget is skipped and logged in the job's output. A second weekly report in a week posts nothing and says so in its log (until Nov 6 it failed its job; with the backup clock, a second run is expected).
 
 ## What would change my mind
 
