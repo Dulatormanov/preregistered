@@ -17,3 +17,16 @@ What was harder than it should be, and what it cost.
 - The plan's package name `platform/` would clash with Python's own `platform` module, which the Anthropic SDK imports. Build day 1 uses `core/` instead.
 - `drift.yml` did not parse: a `": "` inside an unquoted `${{ }}` default is not valid YAML. GitHub showed the workflow under its file path and refused to start it. Nothing had checked the YAML, because the registry test reads the workflow files with its own small reader. CI now parses every workflow file with Ruby's YAML parser, which the runners already have.
 - The scheduler came back for 18 minutes only: scheduled ticks ran at 00:15, 00:25, 00:29 and 00:33 UTC on Nov 5, then none again until 07:17 UTC. In that time I merged about 15 pull requests, and most of them changed a workflow file. The pattern from Days 0 to 2 holds for any workflow file, not only `tick.yml`. So from Build day 8 on, workflow changes go out in as few merges as possible.
+
+## 2026-11-05 (from 07:17 UTC)
+
+- The secret `HC_WATCHDOG_URL` was saved only at 09:39 UTC, so until then nothing would have noticed a stopped watchdog. The watchdog's own issue had said so since 23:21 UTC on Nov 4.
+- GitHub's schedule started no tick from 07:57 to 09:40 UTC, so ticks were started by hand at 09:40 and 09:54, and the watchdog at 09:40. From 10:04 the backup clock on the owner's server did that (ADR-001), with a token the owner made for it.
+- Up to 11:00 UTC, GitHub's schedule started 2 of 22 watchdog runs and 1 of 11 model-watcher runs, so the watchdog opened `missed:watch/watch`. The backup clock took both over the same day.
+- From 15:34 UTC to 07:15 UTC on Nov 6 (15 h 41 min) the backup clock started nothing: a hand edit of its server copy, made for GD3, did not compile, and the read token GD3 had broken stayed broken. Fixed by hand at 07:15: the server copy copied again from `ops/backup_clock.py`, the token saved again, and a tick started. The server copy is now only ever copied and compiled, never edited (DECISIONS.md, Nov 6).
+
+## 2026-11-06
+
+- By 07:18 UTC, GitHub's schedule had started none of the day's reveal, drift check and outcome collector (the drift check had run 8 hours late on Nov 5), so all three were started by hand. The backup clock has started them since.
+- GD3's second try broke the read token at 08:40 UTC from a script on the owner's laptop, and the laptop slept, so the script never put it back: two ticks failed loudly until the token was saved again by hand at 09:02. A timed game-day step now runs on the owner's server.
+- GitHub never shows a saved secret again, so putting the read token back after GD3 needed a spare made before it. That spare, `prereg-read-2`, is now the live token, and the unused `prereg-read` has to be deleted by hand in GitHub's settings.
