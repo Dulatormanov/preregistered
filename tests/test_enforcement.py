@@ -95,7 +95,8 @@ def main():
                                         separators=(",", ":")),),
             "a payload not in canonical form": (good.replace(",", ", "),),
             "a payload that does not have its hash": (good, "0" * 64),
-            "a label that was not promoted": (good, None, False),
+            "a label that was not promoted": (canonical(TARGET, "auth"), None, False),  # not synthetic; the sealed
+            # score promoted frontend only (results/sealed.json), and nothing before it
             "the side-door label": (canonical(TARGET, "probe-side-door"),),
             "an issue that is not a target": (canonical(1, "frontend"),),
         }
