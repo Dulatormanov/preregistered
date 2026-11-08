@@ -1,0 +1,58 @@
+{
+ "agreement": 0.8372,
+ "answered": 43,
+ "areas": {
+  "auth": {
+   "guessed": 5,
+   "promoted": false,
+   "right": 4,
+   "true": 5,
+   "wilson_low": 0.3755
+  },
+  "documentation": {
+   "guessed": 3,
+   "promoted": false,
+   "right": 3,
+   "true": 3,
+   "wilson_low": 0.4385
+  },
+  "frontend": {
+   "guessed": 19,
+   "promoted": true,
+   "right": 18,
+   "true": 21,
+   "wilson_low": 0.7536
+  },
+  "other": {
+   "guessed": 5,
+   "promoted": false,
+   "right": 4,
+   "true": 6,
+   "wilson_low": 0.3755
+  },
+  "postgres": {
+   "guessed": 5,
+   "promoted": false,
+   "right": 3,
+   "true": 4,
+   "wilson_low": 0.2307
+  },
+  "self-hosted": {
+   "guessed": 6,
+   "promoted": false,
+   "right": 4,
+   "true": 4,
+   "wilson_low": 0.3
+  }
+ },
+ "champion": "haiku55-p2",
+ "issues": 151,
+ "left_out": 0,
+ "promoted": [
+  "frontend"
+ ],
+ "right": 36,
+ "rules": "rules/ground_truth.toml v2",
+ "run_at": "2026-11-08T07:49:27+00:00",
+ "scorable": 43
+}
