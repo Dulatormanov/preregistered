@@ -4,6 +4,7 @@ Newest first. Each entry says what was decided and why.
 
 ## 2026-11-08
 
+- **GD4 is not run** (GAME_DAYS.md). It was to show a lenient judge prompt making a gating judge drop to advisory, but the judge has never been gating: its card (Nov 5) shows a true-positive rate of 0.57 and no bad held-out labels, so it has been advisory from the start, and the code checks alone decide.
 - **GD2 runs after the window, from 01:00 UTC on Nov 14** (GAME_DAYS.md). Its ticks cannot reach the model, so any issue they meet is guessed only after it ends, and a later guess may come after the first counting label. The script that starts it skips every issue it sees before 01:00, so no window issue (created before Nov 14 00:00) can start it, and by then each window issue has had four normal ticks.
 
 ## 2026-11-06
