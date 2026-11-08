@@ -16,7 +16,7 @@ A team that lets agents work on its behalf needs three things it cannot get from
 
 1. **An offline benchmark** on old issues. Cheap and fast, but the labels already exist, so nobody can tell a result from a choice, and a model may have seen the issues in training.
 2. **A live bot on the real repo** that labels issues. It would be judged by real use, but it writes to someone else's project without asking, which this project never does.
-3. **Live, pre-registered predictions** on the real repo, read only, each locked by a public hash before the first human label, and scored later by the labels the maintainers add on their own. The one write the system may make goes to its own sandbox, through a gateway, after a human approves the exact bytes.
+3. **Live, pre-registered predictions** on the real repo, read only, each locked by a public hash minutes after the issue opens, and scored later by the labels the maintainers add on their own; a guess counts only if it was locked before the first of them. The one write the system may make goes to its own sandbox, through a gateway, after a human approves the exact bytes.
 
 ## Decision
 
