@@ -30,8 +30,9 @@ def main():
                   " prereg.predictions, prereg.issues_seen restart identity")
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     with psycopg.connect(role_url("triage_agent"), autocommit=True) as t:
-        t.execute("select prereg.enqueue_issue(9901, now(), 'h', '{}', 'haiku55-p0', %s)",
-                  [Jsonb({"area": "other", "needs_details": False, "input_sha256": "h"})])
+        t.execute("select prereg.enqueue_issue(9901, timestamptz '2026-11-06 06:00+00', 'h', '{}', 'haiku55-p0', %s)",
+                  [Jsonb({"area": "other", "needs_details": False, "input_sha256": "h"})])  # created before the live
+        # window, which counts issues by when they were created, so the window below holds 9903 only, whatever today is
         attempt = t.execute("select * from prereg.claim_next(30, 'test')").fetchone()[0]
         t.execute("select prereg.complete(%s, 'guessed', 'auth', false, 'h', %s)", [attempt, Jsonb(STEP)])
         for minute, trigger in ((7, "schedule"), (7, "schedule"), (22, "schedule"), (30, "workflow_dispatch")):
