@@ -2,6 +2,10 @@
 
 Newest first. Each entry says what was decided and why.
 
+## 2026-11-08
+
+- **GD2 runs after the window, from 01:00 UTC on Nov 14** (GAME_DAYS.md). Its ticks cannot reach the model, so any issue they meet is guessed only after it ends, and a later guess may come after the first counting label. The script that starts it skips every issue it sees before 01:00, so no window issue (created before Nov 14 00:00) can start it, and by then each window issue has had four normal ticks.
+
 ## 2026-11-06
 
 - **The watchdog counts a tick for the slot it started in, as the backup clock does** (`ops/watchdog.py`). GitHub's schedule started the 10:37, 11:07 and 11:22 ticks 48 to 51 minutes late, each in a later slot. The backup clock saw a run in that slot and started none, but the watchdog counted each late tick for its planned slot, past that slot's grace. So 3 slots had no run in its eyes, and at 13:19 UTC it opened `missed:tick/poll`, although every one of those ticks had read upstream with HTTP 200. The Nov 5 entry already said a tick counts for the slot it started in, whoever started it; for a scheduled tick the code did not do that. `tests/test_watchdog.py` replays the case. Check 3 is unchanged: the weekly report still counts GitHub's schedule alone, by planned slot.
