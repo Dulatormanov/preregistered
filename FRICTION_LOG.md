@@ -30,3 +30,8 @@ What was harder than it should be, and what it cost.
 - By 07:18 UTC, GitHub's schedule had started none of the day's reveal, drift check and outcome collector (the drift check had run 8 hours late on Nov 5), so all three were started by hand. The backup clock has started them since.
 - GD3's second try broke the read token at 08:40 UTC from a script on the owner's laptop, and the laptop slept, so the script never put it back: two ticks failed loudly until the token was saved again by hand at 09:02. A timed game-day step now runs on the owner's server.
 - GitHub never shows a saved secret again, so putting the read token back after GD3 needed a spare made before it. That spare, `prereg-read-2`, is now the live token, and the unused `prereg-read` has to be deleted by hand in GitHub's settings.
+- At 13:19 UTC the watchdog opened `missed:tick/poll`, although every tick had read upstream with HTTP 200: GitHub's schedule had started three ticks 48 to 51 minutes late, and the watchdog counted each for its planned slot (DECISIONS.md, Nov 6). The issue was closed by hand at 14:20, after the fixed watchdog's first run.
+
+## 2026-11-08
+
+- The sealed score's pull request failed `test` twice, both times on a test, not on the score. `tests/test_weekly_report.py` created an issue at `now()`, which since Nov 7 falls in the live window, and `tests/test_enforcement.py` used `frontend` as its label that was not promoted, and the sealed score promoted it. Two test-only pull requests fixed them, and the score was merged at 09:21 UTC. A pull request opened by `GITHUB_TOKEN` starts no checks, so each try needed the pull request closed and reopened by hand.
