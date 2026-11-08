@@ -2,7 +2,7 @@ Independent project, not affiliated with Supabase.
 
 # preregistered
 
-An agent guesses a label for every new public issue in [supabase/supabase](https://github.com/supabase/supabase), every 15 minutes, and locks each guess before any person labels the issue: a hash of the new guesses goes on the [Notary log](https://github.com/Dulatormanov/preregistered/issues/1), and GitHub stamps the time. Later, the labels that maintainers add show how often it agreed. The rules were written down, and anchored, before any result existed ([`PREREGISTRATION.md`](PREREGISTRATION.md)); the one change since, a shorter window, was written and anchored before that window opened ([`DEVIATIONS.md`](DEVIATIONS.md)).
+An agent guesses a label for every new public issue in [supabase/supabase](https://github.com/supabase/supabase), every 15 minutes, and locks each guess minutes after the issue opens: a hash of the new guesses goes on the [Notary log](https://github.com/Dulatormanov/preregistered/issues/1), and GitHub stamps the time. Later, the labels that maintainers add show how often it agreed, and a guess counts only if it was locked before the first of them. The rules were written down, and anchored, before any result existed ([`PREREGISTRATION.md`](PREREGISTRATION.md)); the one change since, a shorter window, was written and anchored before that window opened ([`DEVIATIONS.md`](DEVIATIONS.md)).
 
 It only reads Supabase's public data. It never writes to Supabase's repositories, and it stores numbers, labels and hashes, never issue text.
 
