@@ -1,0 +1,17 @@
+{
+ "check_id": "claude-fable-5-2-20261109T1949",
+ "cost": 0.0,
+ "cost_per_100": null,
+ "dry_run": false,
+ "hours": 0.0,
+ "incumbent": "incumbent",
+ "live": "0 of 0",
+ "losses": 0,
+ "model": "claude-fable-5-2",
+ "p": 1.0,
+ "reason": "the $10 cap was reached",
+ "safety": "not run",
+ "set": "nothing (skipped)",
+ "verdict": "SKIPPED",
+ "wins": 0
+}
