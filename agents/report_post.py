@@ -17,7 +17,7 @@ def main():
     if broken:
         line = f"(The agent's summary was left out: it broke the check for {', '.join(broken)}.)"
     else:
-        line = summary
+        line = f"**The report agent's summary:** {summary}"
     text = report.read_text().rstrip("\n").split("\n")
     report.write_text("\n".join(text[:1] + ["", line] + text[1:]) + "\n")
     print("summary:", "kept" if not broken else f"left out ({', '.join(broken)})")

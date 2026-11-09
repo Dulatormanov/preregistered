@@ -33,8 +33,8 @@ select d::date,
   (select coalesce(sum(s.cost_usd), 0) from prereg.steps s where s.created_at >= d and s.created_at < d + interval '1 day')
 from generate_series(%(start)s::timestamptz, %(start)s::timestamptz + interval '6 days', interval '1 day') d
 order by d"""
-HEAD = ("| Day (UTC) | Tick runs | Missed slots | Failed runs | Champion guesses | Baseline guesses | Dead letters"
-        " | Expired | Anchors | Spend (USD) | Actions (min) |\n|---|---|---|---|---|---|---|---|---|---|---|")
+HEAD = ("| Day (UTC) | Tick runs | Missed slots | Failed runs (all workflows) | Champion guesses | Baseline guesses"
+        " | Dead letters | Expired | Anchors | Spend (USD) | Actions (min) |\n|---|---|---|---|---|---|---|---|---|---|---|")
 
 
 def utc(s):
@@ -72,8 +72,10 @@ def agreement_line(so_far):
 
 def render(start, rows, runs, so_far=()):
     end = start + timedelta(days=6)
-    lines = [f"**Weekly report v0, {start:%b} {start.day} to {end:%b} {end.day}, UTC.** Counts only; no model wrote"
-             f" this. A missed slot is a 15-minute slot with no scheduled tick.", "", HEAD]
+    lines = [f"**Weekly report v0, {start:%b} {start.day} to {end:%b} {end.day}, UTC.** Counts only. Code makes the"
+             f" table and the lines under it; the report agent writes the summary above the table, and code posts it"
+             f" only if it passes the four checks in agents/report_checks.py. A missed slot is a 15-minute slot with no"
+             f" scheduled tick; a failed run is a failed run of any workflow, not only of the tick.", "", HEAD]
     tail = ["", agreement_line(so_far) if so_far else "", "Independent project, not affiliated with Supabase."]
     for day, slots, champion, baseline, dead, expired, anchors, spend in rows:
         r = runs.get(day.isoformat(), {"ticks": 0, "failed": 0, "minutes": 0.0})
