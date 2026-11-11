@@ -2,6 +2,11 @@
 
 Newest first. Each entry says what was decided and why.
 
+## 2026-11-11 (Day 7)
+
+- **Day 7 is done.** Seven days of runs exist, Nov 4 to 10, and every fix made by hand is a line in FRICTION_LOG.md. No tick has been started by hand since 07:15 UTC on Nov 6. From Nov 7 on, 95 or 96 of each day's 96 slots had a tick, no tick lost a guess, and no message went to dead letters; the 11 window issues so far each have both guesses.
+- **Check 3, third result (Nov 4 to 10, 672 slots):** GitHub's schedule started 97 ticks, 14% of the slots, a median of 33 minutes after the planned time (90th percentile 55 minutes, longest 59.5). 73 of them started more than 15 minutes late, in a later slot. The backup clock started the rest (ADR-001). It missed two slots, each after one failed call to GitHub (Nov 7 19:49 UTC, connection closed; Nov 8 19:34 UTC, HTTP 502), since it does not retry. Each time, the next tick read the same issues 15 minutes later, and the watchdog alerts only after two unhealthy slots in a row, so the backup clock stays as it is. One watchdog run it started (Nov 9 18:19 UTC) failed with no job started; the next one, 30 minutes later, passed.
+
 ## 2026-11-08
 
 - **GD4 is not run** (GAME_DAYS.md). It was to show a lenient judge prompt making a gating judge drop to advisory, but the judge has never been gating: its card (Nov 5) shows a true-positive rate of 0.57 and no bad held-out labels, so it has been advisory from the start, and the code checks alone decide.
