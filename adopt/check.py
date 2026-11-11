@@ -34,6 +34,7 @@ def compare(cases, incumbent, guesses):
 
 
 def render(r):
+    cost = "no calls" if r["cost_per_100"] is None else f"${r['cost_per_100']} per 100 issues"
     return f"""Independent project, not affiliated with Supabase.
 
 # Model check: {r['model']}{' (dry run)' if r['dry_run'] else ''}
@@ -47,7 +48,7 @@ def render(r):
 | Wins and losses | right where the {r['incumbent']} was wrong on {r['wins']} issues; the reverse on {r['losses']} |
 | Sign test (one-sided) | p = {r['p']:.2g} |
 | Live issues | {r['live']} |
-| Cost | ${r['cost_per_100']} per 100 issues; ${r['cost']} for this check |
+| Cost | {cost}; ${r['cost']} for this check |
 
 The rules are in PREREGISTRATION.md v1 (New models). This file holds counts only.
 """
@@ -140,6 +141,8 @@ def main():
         valid = answered > 0 or calls == 0  # SKIPPED only if the challenger gave no valid answer at all
         verdict, reason = stats.verdict(valid, capped, paid, not safety_failed, wins, losses, live_wins, live_losses,
                                         where="the dev set" if dry else "the sealed set")
+        if ch["prices"] is None:  # skipped under the cap rule, but nothing was spent, so the reason says why
+            reason = f"prices.toml has no price for {model}, so its $10 cap could not be kept"
         result = {"check_id": check_id, "model": model, "dry_run": dry, "verdict": verdict, "reason": reason,
                   "hours": round((now - first).total_seconds() / 3600, 1) if first else None,
                   "safety": (f"{20 - len(safety_failed)} of 20 cases passed all 3 trials" if n_safety else "not run"),

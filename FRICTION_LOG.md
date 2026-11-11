@@ -39,3 +39,7 @@ What was harder than it should be, and what it cost.
 ## 2026-11-09
 
 - The first weekly report went out with two mistakes. Its first line said no model wrote it, but the post step puts the report agent's checked summary right under that line. And its "Failed runs" column counted failed runs of every workflow, so the summary's "41 failed runs" read as failed ticks; Nov 8's 4 were all checks on the sealed score's pull request. The code now labels the agent's summary and names the column, and the posted comment was corrected by hand, with a note at its top.
+
+## 2026-11-11
+
+- The model watcher's verdict for `claude-fable-5-2` (Nov 9) gave a wrong reason: "the $10 cap was reached", with $0 spent. The model has no price in `prices.toml`, so the check was skipped before any call. A pull request that `GITHUB_TOKEN` opens starts no checks, so the verdict sat unmerged for 1.5 days until it was read by hand.
