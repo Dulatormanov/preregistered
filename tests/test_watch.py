@@ -29,6 +29,10 @@ def main():
                    "safety": "20 of 20", "set": "s", "incumbent": "rules_v0", "wins": 3, "losses": 1, "p": 2.9e-09,
                    "live": "0 of 0", "cost": 0.01, "cost_per_100": 0.02})
     assert "INCONCLUSIVE" in text and "(dry run)" in text and "p = 2.9e-09" in text and not lint_refs(text)
+    text = render({"model": "m", "dry_run": False, "verdict": "SKIPPED", "reason": "r", "hours": 0.0,
+                   "safety": "not run", "set": "nothing (skipped)", "incumbent": "incumbent", "wins": 0, "losses": 0,
+                   "p": 1.0, "live": "0 of 0", "cost": 0.0, "cost_per_100": None})
+    assert "| Cost | no calls; $0.0 for this check |" in text, text  # was "$None per 100 issues"
     print("ok: the watcher picks new Claude models, the check counts wins and losses, and the verdict renders")
 
 
