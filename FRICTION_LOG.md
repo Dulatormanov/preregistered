@@ -35,3 +35,7 @@ What was harder than it should be, and what it cost.
 ## 2026-11-08
 
 - The sealed score's pull request failed `test` twice, both times on a test, not on the score. `tests/test_weekly_report.py` created an issue at `now()`, which since Nov 7 falls in the live window, and `tests/test_enforcement.py` used `frontend` as its label that was not promoted, and the sealed score promoted it. Two test-only pull requests fixed them, and the score was merged at 09:21 UTC. A pull request opened by `GITHUB_TOKEN` starts no checks, so each try needed the pull request closed and reopened by hand.
+
+## 2026-11-09
+
+- The first weekly report went out with two mistakes. Its first line said no model wrote it, but the post step puts the report agent's checked summary right under that line. And its "Failed runs" column counted failed runs of every workflow, so the summary's "41 failed runs" read as failed ticks; Nov 8's 4 were all checks on the sealed score's pull request. The code now labels the agent's summary and names the column, and the posted comment was corrected by hand, with a note at its top.
