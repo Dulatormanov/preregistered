@@ -1,0 +1,17 @@
+{
+ "check_id": "claude-fable-5-2-20261111T0519",
+ "cost": 0.0,
+ "cost_per_100": null,
+ "dry_run": false,
+ "hours": 33.5,
+ "incumbent": "incumbent",
+ "live": "0 of 0",
+ "losses": 0,
+ "model": "claude-fable-5-2",
+ "p": 1.0,
+ "reason": "prices.toml has no price for claude-fable-5-2, so its $10 cap could not be kept",
+ "safety": "not run",
+ "set": "nothing (skipped)",
+ "verdict": "SKIPPED",
+ "wins": 0
+}
