@@ -2,6 +2,10 @@
 
 Newest first. Each entry says what was decided and why.
 
+## 2026-11-12
+
+- **The first reveal with guesses.** The 04:19 UTC run put the 11 guesses saved on Nov 4 and 5 (ids 1 to 11) on the data branch. From a clean clone, `make verify` recomputes anchors 1, 2, 6 and 7 from them, so the hashes GitHub stamped a week ago match the guesses now public; all 27 anchors hold. The window's guesses go public from the Nov 14 run.
+
 ## 2026-11-11 (Day 7)
 
 - **A model with no price says so in its verdict** (`adopt/check.py`). The watcher saw `claude-fable-5-2` at 19:49 UTC on Nov 9, and its check was SKIPPED, as PREREGISTRATION.md v1 says when the $10 cap cannot be kept, but the reason said the cap was reached, with nothing spent. The reason now names the missing price, and the cost line says "no calls" instead of "$None". The first verdict's pull request was closed and the check run again. A paid check of that model would need its price in `prices.toml` and would use one of the two paid checks the rules allow; none is planned.

@@ -43,3 +43,4 @@ What was harder than it should be, and what it cost.
 ## 2026-11-11
 
 - The model watcher's verdict for `claude-fable-5-2` (Nov 9) gave a wrong reason: "the $10 cap was reached", with $0 spent. The model has no price in `prices.toml`, so the check was skipped before any call. A pull request that `GITHUB_TOKEN` opens starts no checks, so the verdict sat unmerged for 1.5 days until it was read by hand.
+- At 21:20 UTC the watchdog opened `missed:tick/poll`. GitHub could not start the ticks the backup clock dispatched at 20:19 and 20:34 UTC (`startup_failure`, no job started), during GitHub's own incidents (Webhooks from 20:22 to 20:26 UTC, then Actions, Pages and more from 20:48 to 21:21). The 20:49 tick ran, and no upstream issue was opened in the gap. The issue was closed by hand the next morning, when the laptop woke.
