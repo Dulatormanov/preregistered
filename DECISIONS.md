@@ -2,6 +2,10 @@
 
 Newest first. Each entry says what was decided and why.
 
+## 2026-11-14
+
+- **An issue moved out of supabase/supabase stays in the ledger's window count, not in the public one.** One window issue, created Nov 12, was transferred to another Supabase repository two hours later. The ledger saw it and guessed it, so `tools/tables.py` counts 17 window issues; GitHub's search for supabase/supabase no longer finds it, so `tools/public_tables.py` and the final report count 16. Its only label in supabase/supabase was `bug`, added by the issue form, which the rules ignore, so it is scorable in neither view, and the agreement is the same in both. The rules say nothing about transfers, and nothing changes.
+
 ## 2026-11-12
 
 - **The first reveal with guesses.** The 04:19 UTC run put the 11 guesses saved on Nov 4 and 5 (ids 1 to 11) on the data branch. From a clean clone, `make verify` recomputes anchors 1, 2, 6 and 7 from them, so the hashes GitHub stamped a week ago match the guesses now public; all 27 anchors hold. The window's guesses go public from the Nov 14 run.
