@@ -4,6 +4,7 @@ Newest first. Each entry says what was decided and why.
 
 ## 2026-11-14
 
+- **`make verify` no longer fails on an anchor posted after the last reveal** (`notary/verify.py`). It wanted the published anchors and the bot's comments to be the same list, so from a clean clone it failed whenever a new issue had been anchored since that day's reveal (34 published, 35 comments at 05:19 UTC today), and the same race could fail the reveal's own check. Now the published anchors must be the bot's first comments, one for one; a newer comment is reported, and is a problem only once it is 2 days old, since the reveal runs daily.
 - **An issue moved out of supabase/supabase stays in the ledger's window count, not in the public one.** One window issue, created Nov 12, was transferred to another Supabase repository two hours later. The ledger saw it and guessed it, so `tools/tables.py` counts 17 window issues; GitHub's search for supabase/supabase no longer finds it, so `tools/public_tables.py` and the final report count 16. Its only label in supabase/supabase was `bug`, added by the issue form, which the rules ignore, so it is scorable in neither view, and the agreement is the same in both. The rules say nothing about transfers, and nothing changes.
 
 ## 2026-11-12
