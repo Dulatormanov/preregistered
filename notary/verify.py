@@ -10,8 +10,9 @@ For every anchor, in order:
   skipped is not a gap. If fewer are revealed while the anchor is under 9 days old (the reveal publishes rows
   7 days old, daily, and may miss a run), it is "waiting", which is not a failure; after that it is a problem;
 - a file anchor matches the file in git at its commit.
-No anchor may be missing: the published list and the bot's comments must be the same, one for one. No revealed
-row may repeat an id, or lie outside every rows anchor's range.
+No anchor may be missing: the published list and the bot's first comments must be the same, one for one. A bot
+comment newer than the last reveal is reported, and is a problem only once it is 2 days old (the reveal publishes
+every anchor daily, and may miss a run). No revealed row may repeat an id, or lie outside every rows anchor's range.
 """
 import hashlib
 import json
@@ -27,6 +28,7 @@ from notary.canonical import GENESIS, chain, file_text, sha256
 
 ROOT = Path(__file__).resolve().parents[1]
 REVEAL_DAYS = 9  # every row of an anchor is revealed by then (v1: 16)
+PUBLISH_DAYS = 2  # every anchor comment is on the data branch by then
 QUERY = """query($cursor: String) { repository(owner: "Dulatormanov", name: "preregistered") { issue(number: 1) {
   comments(first: 100, after: $cursor) { pageInfo { hasNextPage endCursor }
     nodes { databaseId body createdAt lastEditedAt author { __typename login } } } } } }"""
@@ -59,9 +61,15 @@ def verify(lines, anchors, comments, git_show=git_file, now=None):
     bot = [c for c in comments if (c.get("author") or {}).get("__typename") == "Bot"
            and c["author"]["login"] == "github-actions"]
     problems, report, prev, low = [], [], GENESIS, 0
+    age = lambda c: (now - datetime.fromisoformat(c["createdAt"].replace("Z", "+00:00"))).days  # noqa: E731
     problems += [f"guess {i} is revealed {k} times" for i, k in sorted(Counter(ids).items()) if k > 1]
-    if [a["comment_id"] for a in anchors] != [c["databaseId"] for c in bot]:
-        problems.append(f"{len(anchors)} published anchors, but {len(bot)} anchor comments by the bot")
+    if [a["comment_id"] for a in anchors] != [c["databaseId"] for c in bot[:len(anchors)]]:
+        problems.append(f"{len(anchors)} published anchors, but the bot's first {len(anchors)} anchor comments differ")
+    newer = bot[len(anchors):]  # posted after the last reveal, so the next one publishes them
+    if any(age(c) >= PUBLISH_DAYS for c in newer):
+        problems.append(f"an anchor comment is {PUBLISH_DAYS} or more days old and not on the data branch")
+    elif newer:
+        report.append(f"{len(newer)} newer anchor comments: posted after the last reveal, published by the next")
     for a, c in zip(anchors, bot):
         text, _, head = c["body"].rpartition(" chain=")
         if c.get("lastEditedAt"):
@@ -71,14 +79,13 @@ def verify(lines, anchors, comments, git_show=git_file, now=None):
         if " kind=rows " in f" {text} ":
             upto, n = (int(text.split(f" {k}=")[1].split()[0]) for k in ("upto", "n"))
             covered = [rows[i] for i in sorted(rows) if low < i <= upto]
-            age = (now - datetime.fromisoformat(c["createdAt"].replace("Z", "+00:00"))).days
             if len(covered) == n and text.split(" rows=")[1] == sha256("\n".join(covered)):
                 report.append(f"anchor {a['id']}: its {n} guesses, ids {low + 1} to {upto}, recompute")
-            elif len(covered) < n and age < REVEAL_DAYS:
+            elif len(covered) < n and age(c) < REVEAL_DAYS:
                 report.append(f"anchor {a['id']}: waiting for the reveal of guesses {low + 1} to {upto}")
             else:
                 problems.append(f"anchor {a['id']}: {len(covered)} of its {n} guesses, ids {low + 1} to {upto}, are"
-                                f" revealed {age} days after it, and they do not recompute")
+                                f" revealed {age(c)} days after it, and they do not recompute")
             low = upto
         else:
             f = dict(kv.split("=", 1) for kv in text.split()[2:])

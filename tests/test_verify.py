@@ -1,6 +1,7 @@
 """The public verifier (notary/verify.py) on a made-up log: an honest copy holds, an id the database skipped is not a
 gap, and every kind of tampering is caught: an edited, deleted, repeated or added guess, an edited comment, a missing
-anchor, an anchor by someone other than the bot, and a changed file. Run: python tests/test_verify.py"""
+anchor, an anchor by someone other than the bot, and a changed file. An anchor comment newer than the last reveal is
+not a failure until it is 2 days old. Run: python tests/test_verify.py"""
 import copy
 import hashlib
 import json
@@ -61,6 +62,11 @@ def main():
     c[1]["lastEditedAt"] = "2026-11-06T00:00:00Z"
     assert problems(lines, anchors, c)  # an anchor comment was edited
     assert problems(lines, anchors, comments[:1] + comments[2:])  # an anchor is missing
+    assert problems(lines, anchors[:1] + anchors[2:], comments)  # the published list skips one
+    newer = comments + [dict(comments[2], databaseId=104, createdAt="2026-11-05T12:00:00Z")]  # after the reveal
+    assert problems(lines, anchors, newer) == []  # published by the next reveal
+    assert problems(lines, anchors, newer, now=LATER) == [
+        "an anchor comment is 2 or more days old and not on the data branch"]  # the reveal left it out
     c = copy.deepcopy(comments)
     c[0]["author"] = {"__typename": "User", "login": "someone"}
     assert problems(lines, anchors, c)  # a look-alike comment by a person is not an anchor
