@@ -35,7 +35,7 @@ def block(db):
              f"- {seen} issues seen; {champion} champion guesses and {baseline} baseline guesses, under {anchors} anchors"
              f" on the Notary log;",
              f"- {ticks} ticks, {scheduled} of them started by GitHub's schedule; their model calls cost ${float(spend):.4f};",
-             f"- the dev set (186 issues, the 5 A/A runs at commit {floor['commit'][:7]}): agreement"
+             f"- the dev set (186 issues, {floor['runs']} A/A runs of the champion): agreement"
              f" {min(floor['agreement']):.1%} to {max(floor['agreement']):.1%};",
              "- the live window (issues created from 2026-11-07 to 2026-11-13): " + ("; ".join(
                  f"{series} {matched} of {counting} counting guesses right ({scorable} scorable)"

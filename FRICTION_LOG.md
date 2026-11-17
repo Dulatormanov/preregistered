@@ -44,3 +44,8 @@ What was harder than it should be, and what it cost.
 
 - The model watcher's verdict for `claude-fable-5-2` (Nov 9) gave a wrong reason: "the $10 cap was reached", with $0 spent. The model has no price in `prices.toml`, so the check was skipped before any call. A pull request that `GITHUB_TOKEN` opens starts no checks, so the verdict sat unmerged for 1.5 days until it was read by hand.
 - At 21:20 UTC the watchdog opened `missed:tick/poll`. GitHub could not start the ticks the backup clock dispatched at 20:19 and 20:34 UTC (`startup_failure`, no job started), during GitHub's own incidents (Webhooks from 20:22 to 20:26 UTC, then Actions, Pages and more from 20:48 to 21:21). The 20:49 tick ran, and no upstream issue was opened in the gap. The issue was closed by hand the next morning, when the laptop woke.
+
+## 2026-11-17
+
+- The noise floor from one morning's 5 runs (0.36 points) stood for 11 days, although the four 5-run suites later that morning each moved 1.08 points: only Monday's pair was compared with the floor. GitHub's late second pair on Nov 16 tripped it. Every A/A run is compared now.
+- The weekly report's 14 failed runs for Nov 9 to 15 include 4 that never ran: when the bot opens its own pull request, GitHub records each check with no job, as a failure.
