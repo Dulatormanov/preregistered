@@ -40,3 +40,8 @@ The gate compares with main's latest suite results. `suite.yml` runs once after 
 
 - The weekly fresh A/A pair shows a larger drop: the capability limit then rises with it, as twice the new drop.
 - Hard flips in A/A pairs become common: then 3 more trials are not enough to tell noise from a real loss.
+
+## Update, 2026-11-17: both of the above happened
+
+- **A larger drop.** On Nov 16 the second A/A pair moved 1.08 points, more than the floor's 0.36. That floor came from one batch of 5 runs on the morning of Nov 5, and the four 5-run suites after pushes later that morning moved 1.08 points each, but only Monday's pair was compared with it. The floor now comes from all 33 A/A runs of haiku55-p2, Nov 5 to 16: agreement 76.5% to 78.1%, so the largest drop is 1.61 points and the capability limit is 3.2 points, twice the drop. Safety passed every trial. Every A/A run is now compared with the floor.
+- **Hard flips between days.** Between two runs on the same day, at most 2 cases flipped hard, and 6% of the pairs had any. Between runs on different days, 36% of the pairs had at least one, and the worst had 3. Only 7 of the 186 cases ever flipped hard. The gate compares with main's latest suite run, which can be days old, and after a Monday it is a pair, 6 trials per case, not 15. So a pull request that changes nothing can be blocked by the model's drift on these 7 cases. The remedy is to run main's suite next to the pull request's, in the same job. It is not built: the champion is frozen, and no change to an agent file is planned before the project ends.
